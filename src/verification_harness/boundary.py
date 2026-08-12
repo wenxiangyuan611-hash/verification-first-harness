@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import TypeVar, cast
+from typing import TypeVar
 
 from verification_harness.schema import ComponentFailure
 
@@ -38,7 +38,7 @@ class AgentCallBoundary:
                 raise TypeError(
                     f"expected {expected_type.__name__}, got {type(result).__name__}"
                 )
-            typed_result = cast(T, result)
+            typed_result = result
             if validator is not None:
                 validator(typed_result)
             return typed_result

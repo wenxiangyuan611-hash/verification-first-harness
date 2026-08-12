@@ -272,14 +272,21 @@ class TrustGateEngine:
         for _ in range(self.max_repairs + 1):
             self.state = TaskState.CHALLENGING
             self.log_state(f"Critic performing adversarial challenge on Claim #{attempt}...")
+
+            def challenge_claim(
+                current_claim: Claim = claim,
+                current_spec: Spec = spec,
+            ) -> tuple[Obligation, ...]:
+                return self.critic.challenge(
+                    current_claim,
+                    self._snapshot_spec(current_spec),
+                )
+
             try:
                 critic_obligations = AgentCallBoundary.invoke(
                     "critic",
                     "challenge",
-                    lambda current_claim=claim: self.critic.challenge(
-                        current_claim,
-                        self._snapshot_spec(spec),
-                    ),
+                    challenge_claim,
                     tuple,
                 )
                 obligations = self.challenge_policy.authorize(
@@ -304,13 +311,23 @@ class TrustGateEngine:
             self.state = TaskState.VERIFYING
             self.log_state(f"Verifier executing isolated candidate process for Claim #{attempt}...")
             receipt: VerificationReceipt | None = None
+
+            def verify_claim(
+                current_claim: Claim = claim,
+                current_spec: Spec = spec,
+                current_obligations: tuple[Obligation, ...] = obligations,
+            ) -> VerificationReceipt:
+                return self.verifier.verify(
+                    current_claim,
+                    current_spec,
+                    current_obligations,
+                )
+
             try:
                 receipt = AgentCallBoundary.invoke(
                     "verifier",
                     "verify",
-                    lambda current_claim=claim, current_obligations=obligations: (
-                        self.verifier.verify(current_claim, spec, current_obligations)
-                    ),
+                    verify_claim,
                     VerificationReceipt,
                 )
                 TrustGate.validate_receipt(
@@ -396,20 +413,31 @@ class TrustGateEngine:
             self.state = TaskState.REPAIRING
             attempt += 1
             self.log_state(f"[TRUST GATE] Claim rejected. Starting repair attempt #{attempt}...")
+
+            def repair_claim(
+                current_attempt: int = attempt,
+                current_spec: Spec = spec,
+                failed_receipt: VerificationReceipt = receipt,
+            ) -> Claim:
+                return self.worker.repair(
+                    current_attempt,
+                    self._snapshot_spec(current_spec),
+                    self._snapshot_receipt(failed_receipt),
+                )
+
+            def validate_repaired_claim(
+                value: Claim,
+                current_attempt: int = attempt,
+            ) -> None:
+                self._validate_claim(value, current_attempt)
+
             try:
                 repaired_claim = AgentCallBoundary.invoke(
                     "worker",
                     "repair",
-                    lambda current_attempt=attempt, failed_receipt=receipt: self.worker.repair(
-                        current_attempt,
-                        self._snapshot_spec(spec),
-                        self._snapshot_receipt(failed_receipt),
-                    ),
+                    repair_claim,
                     Claim,
-                    lambda value, current_attempt=attempt: self._validate_claim(
-                        value,
-                        current_attempt,
-                    ),
+                    validate_repaired_claim,
                 )
             except ComponentCallError as error:
                 return self._reject_component_failure(
