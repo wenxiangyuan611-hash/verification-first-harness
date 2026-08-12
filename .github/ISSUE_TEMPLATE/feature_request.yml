@@ -1,0 +1,25 @@
+name: Feature request
+description: Propose a verifier, execution backend, protocol, or workflow improvement.
+title: "[Feature]: "
+labels: [enhancement]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Reliability problem
+      description: What error-propagation risk or maintainer workflow needs improvement?
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed change
+    validations:
+      required: true
+  - type: textarea
+    id: verification
+    attributes:
+      label: Acceptance and verification
+      description: How can an independent verifier prove the change works and fails closed?
+    validations:
+      required: true

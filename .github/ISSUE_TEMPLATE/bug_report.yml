@@ -1,0 +1,42 @@
+name: Bug report
+description: Report reproducible incorrect behavior or a fail-open condition.
+title: "[Bug]: "
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: For security vulnerabilities, stop and use a private security advisory.
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      placeholder: 0.1.0
+    validations:
+      required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Platform
+      options: [Linux, macOS, Windows, Other]
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: Include the spec, claim, obligations, command, and observed receipt where safe.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: impact
+    attributes:
+      label: Trust-boundary impact
+      description: Explain whether the issue causes false approval, false rejection, or unavailable verification.
+    validations:
+      required: true
