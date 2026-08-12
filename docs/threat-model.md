@@ -5,6 +5,8 @@
 - An unverified or failed claim must not be approved.
 - A receipt must be bound to the exact claim, spec, attempt, obligations, and evidence.
 - Receipt tampering must be detectable.
+- Failed evidence must be authenticated before it can influence a repair.
+- One untrusted component failure must not terminate or bypass the controller.
 - Ordinary candidate failure must not terminate the controller.
 - Candidate non-termination must be bounded by a controller-side timeout.
 
@@ -22,6 +24,9 @@ consumer may accidentally receive stale or mismatched artifacts.
 - fresh child process per test case;
 - isolated Python mode (`-I`), minimized environment, and parent timeout;
 - fail-closed handling for unknown obligation types.
+- strict component return-type and task/attempt identity checks;
+- bounded critic obligation kinds, identifiers, counts, descriptions, and payloads;
+- containment of component exceptions and `SystemExit` as structured rejection.
 
 ## Out of scope for the built-in runner
 
@@ -48,3 +53,5 @@ The signing key must never enter this execution environment.
 - Deterministic tests prove only the properties they encode.
 - HMAC verification requires controller instances to share a protected secret.
 - A compromised verifier or TrustGate remains inside the trusted computing base.
+- In-process agent calls cannot be forcibly terminated safely; provider adapters
+  must enforce request timeouts and production isolation boundaries.

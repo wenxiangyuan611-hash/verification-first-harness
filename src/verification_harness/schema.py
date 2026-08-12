@@ -53,6 +53,21 @@ class VerificationStatus(Enum):
 
 
 @dataclass(frozen=True)
+class ComponentFailure:
+    """A bounded, structured description of an untrusted component failure."""
+
+    component: str
+    operation: str
+    error_type: str
+    message: str
+
+    def __post_init__(self) -> None:
+        values = (self.component, self.operation, self.error_type, self.message)
+        if any(not value.strip() for value in values):
+            raise ValueError("component failure fields must be non-empty")
+
+
+@dataclass(frozen=True)
 class TestCase:
     id: str
     input: Any
@@ -156,6 +171,12 @@ class Evidence:
     expected_repr: str
     error: str = ""
 
+    def __post_init__(self) -> None:
+        if not self.obligation_id.strip():
+            raise ValueError("evidence obligation_id must be non-empty")
+        if self.status.__class__ is not VerificationStatus:
+            raise TypeError("evidence status must be VerificationStatus")
+
     @property
     def is_passed(self) -> bool:
         return self.status is VerificationStatus.PASSED
@@ -175,6 +196,20 @@ class VerificationReceipt:
     signature: str
 
     def __post_init__(self) -> None:
+        if not self.run_id.strip():
+            raise ValueError("receipt run_id must be non-empty")
+        if self.attempt < 1:
+            raise ValueError("receipt attempt must be positive")
+        if not self.protocol_version.strip():
+            raise ValueError("receipt protocol_version must be non-empty")
+        if self.obligations.__class__ is not tuple or any(
+            obligation.__class__ is not Obligation for obligation in self.obligations
+        ):
+            raise TypeError("receipt obligations must be a tuple of Obligation values")
+        if self.evidence.__class__ is not tuple or any(
+            item.__class__ is not Evidence for item in self.evidence
+        ):
+            raise TypeError("receipt evidence must be a tuple of Evidence values")
         obligation_ids = [obligation.id for obligation in self.obligations]
         if len(obligation_ids) != len(set(obligation_ids)):
             raise ValueError("receipt obligation IDs must be unique")
@@ -194,9 +229,23 @@ class VerificationReceipt:
 
     @property
     def is_passed(self) -> bool:
+        return self.is_complete and self.is_final and all(
+            evidence.is_passed for evidence in self.evidence
+        )
+
+    @property
+    def is_complete(self) -> bool:
+        """Whether every obligation has exactly one ordered evidence item."""
         if not self.obligations or len(self.evidence) != len(self.obligations):
             return False
         expected_ids = [obligation.id for obligation in self.obligations]
         evidence_ids = [evidence.obligation_id for evidence in self.evidence]
-        evidence_complete = evidence_ids == expected_ids
-        return evidence_complete and all(evidence.is_passed for evidence in self.evidence)
+        return evidence_ids == expected_ids
+
+    @property
+    def is_final(self) -> bool:
+        """Whether the verifier resolved every evidence item to pass or fail."""
+        final_statuses = {VerificationStatus.PASSED, VerificationStatus.FAILED}
+        return bool(self.evidence) and all(
+            evidence.status in final_statuses for evidence in self.evidence
+        )
