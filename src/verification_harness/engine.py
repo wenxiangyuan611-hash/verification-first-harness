@@ -276,7 +276,10 @@ class TrustGateEngine:
                 critic_obligations = AgentCallBoundary.invoke(
                     "critic",
                     "challenge",
-                    lambda: self.critic.challenge(claim, self._snapshot_spec(spec)),
+                    lambda current_claim=claim: self.critic.challenge(
+                        current_claim,
+                        self._snapshot_spec(spec),
+                    ),
                     tuple,
                 )
                 obligations = self.challenge_policy.authorize(
@@ -305,7 +308,9 @@ class TrustGateEngine:
                 receipt = AgentCallBoundary.invoke(
                     "verifier",
                     "verify",
-                    lambda: self.verifier.verify(claim, spec, obligations),
+                    lambda current_claim=claim, current_obligations=obligations: (
+                        self.verifier.verify(current_claim, spec, current_obligations)
+                    ),
                     VerificationReceipt,
                 )
                 TrustGate.validate_receipt(
@@ -395,13 +400,16 @@ class TrustGateEngine:
                 repaired_claim = AgentCallBoundary.invoke(
                     "worker",
                     "repair",
-                    lambda: self.worker.repair(
-                        attempt,
+                    lambda current_attempt=attempt, failed_receipt=receipt: self.worker.repair(
+                        current_attempt,
                         self._snapshot_spec(spec),
-                        self._snapshot_receipt(receipt),
+                        self._snapshot_receipt(failed_receipt),
                     ),
                     Claim,
-                    lambda value: self._validate_claim(value, attempt),
+                    lambda value, current_attempt=attempt: self._validate_claim(
+                        value,
+                        current_attempt,
+                    ),
                 )
             except ComponentCallError as error:
                 return self._reject_component_failure(
