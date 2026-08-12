@@ -98,10 +98,10 @@ class TrustGateEngine:
                     receipt,
                     self.verifier,
                     obligations,
-                    lambda approved_claim, approved_receipt: {
+                    lambda approved_claim, approved_receipt, verified_attempt=attempt: {
                         "status": "APPROVED",
                         "final_state": self.state.value,
-                        "attempts": attempt,
+                        "attempts": verified_attempt,
                         "claim": approved_claim,
                         "receipt": approved_receipt,
                         "audit_trail": tuple(self.audit_trail),

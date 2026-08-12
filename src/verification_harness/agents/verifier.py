@@ -262,7 +262,7 @@ class VerifierAgent(BaseAgent):
             "PYTHONIOENCODING": "utf-8",
             "PYTHONUNBUFFERED": "1",
         }
-        system_root = os.environ.get("SystemRoot")
+        system_root = os.environ.get("SYSTEMROOT")
         if os.name == "nt" and system_root:
             environment["SystemRoot"] = system_root
         return environment
