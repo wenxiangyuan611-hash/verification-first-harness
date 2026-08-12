@@ -23,7 +23,7 @@ verification receipts.
 6. Failure, repair, and re-verification are normal control flow.
 7. Reliability and error containment matter more than the number of agents.
 
-These invariants define the trust model. Version 0.1 enforces them for a narrow
+These invariants define the trust model. Version 0.1.1 enforces them for a narrow
 Python coding-task workflow: the task contract is authorized out of band, the
 Worker emits an untrusted code `Claim`, the Critic proposes additional checks,
 and only a complete, authentic PASS receipt can cross the `TrustGate`.
@@ -46,6 +46,13 @@ flowchart LR
 - HMAC-SHA-256 receipts covering the claim, spec, attempt, obligations, evidence,
   protocol version, and run ID.
 - A fail-closed `TrustGate` that checks all bindings before propagation.
+- A fail-closed component boundary that converts agent exceptions and malformed
+  values into structured rejection records.
+- A `ChallengePolicy` that bounds critic influence before proposed obligations
+  reach the verifier.
+- Canonical detached snapshots that prevent an agent from mutating the
+  controller-owned spec, challenge payloads, or repair receipt in place.
+- Authentication of failed receipts before their evidence may inform a repair.
 - Fresh-process execution and parent-enforced timeout for every test case.
 - Structural Python protocols for model- and provider-independent agents.
 - A deterministic reference Planner, Worker, Critic, and Verifier.
@@ -109,6 +116,10 @@ result = engine.run("add_one")
 assert result["status"] == "APPROVED"
 ```
 
+Every engine result contains a `failure` field. It is `None` for ordinary verified
+or test-rejected runs and contains a structured `ComponentFailure` when an agent,
+policy, verifier, or receipt boundary fails closed.
+
 ## Connecting different models
 
 The engine depends on structural interfaces in
@@ -116,6 +127,10 @@ The engine depends on structural interfaces in
 Grok-backed worker, or Claude-backed critic can be supplied without changing the
 engine. Their outputs remain untrusted; the deterministic verifier retains the
 final decision.
+
+Provider adapters should enforce their own request timeouts. The in-process
+component boundary contains reported timeout exceptions but cannot safely stop an
+arbitrary thread that ignores cancellation.
 
 Do not put model API keys or the receipt-signing key in candidate execution
 environments. The signing key belongs to the trusted controller. Set

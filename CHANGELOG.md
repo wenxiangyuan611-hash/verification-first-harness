@@ -12,6 +12,28 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Signed acceptance-criteria authority.
 - Parallel worker and critic orchestration.
 
+## [0.1.1] - 2026-08-12
+
+### Added
+
+- A fail-closed component-call boundary for exceptions and malformed return values.
+- A configurable challenge policy that limits critic obligation kinds, IDs, counts,
+  descriptions, and payload sizes.
+- Structured component failure records in rejected engine results.
+- Canonical detached snapshots for specs, claims, critic payloads, and repair receipts
+  exposed across untrusted component boundaries.
+- Adversarial tests for controller termination attempts, forged receipts, invalid
+  signature decisions, malformed critic output, and failed repairs.
+
+### Changed
+
+- Failed receipts are now checked for completeness, final evidence, exact bindings,
+  and signature authenticity before they may inform a repair.
+- Planner and worker identity fields are checked against the requested task and
+  expected attempt.
+- Component failures now produce a controlled `REJECTED` result instead of escaping
+  the engine.
+
 ## [0.1.0] - 2026-08-12
 
 ### Added

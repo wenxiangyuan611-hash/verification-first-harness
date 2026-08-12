@@ -1,8 +1,10 @@
 """Public API for the verification-first agent harness."""
 
 from verification_harness.engine import TrustGate, TrustGateEngine
+from verification_harness.policy import ChallengePolicy, ChallengePolicyError
 from verification_harness.schema import (
     Claim,
+    ComponentFailure,
     Evidence,
     Obligation,
     Spec,
@@ -12,10 +14,13 @@ from verification_harness.schema import (
     VerificationStatus,
 )
 
-__version__ = "0.1.0"
+__version__ = "0.1.1"
 
 __all__ = [
+    "ChallengePolicy",
+    "ChallengePolicyError",
     "Claim",
+    "ComponentFailure",
     "Evidence",
     "Obligation",
     "Spec",

@@ -65,8 +65,11 @@ class EngineTests(unittest.TestCase):
             CriticAgent(),
             self.verifier,
         )
-        with self.assertRaisesRegex(ValueError, "no knowledge"):
-            engine.run("missing")
+        result = engine.run("missing")
+        self.assertEqual("REJECTED", result["status"])
+        self.assertEqual(0, result["attempts"])
+        self.assertEqual("planner", result["failure"].component)
+        self.assertIn("no knowledge", result["failure"].message)
 
     def test_default_worker_stub_is_challenged_and_rejected(self) -> None:
         result = TrustGateEngine(

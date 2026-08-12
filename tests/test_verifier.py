@@ -100,6 +100,38 @@ class VerifierTests(unittest.TestCase):
                 lambda *_: None,
             )
 
+    def test_incomplete_and_pending_receipts_never_propagate(self) -> None:
+        claim = Claim("worker", 1, "def add_one(value): return value + 1", "candidate")
+        receipt = self.verifier.verify(claim, self.spec, self.obligations)
+
+        incomplete = replace(receipt, evidence=(), signature="")
+        incomplete = replace(incomplete, signature=self.verifier.sign_receipt(incomplete))
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            TrustGate.propagate(
+                claim,
+                self.spec,
+                incomplete,
+                self.verifier,
+                self.obligations,
+                lambda *_: None,
+            )
+
+        pending_evidence = replace(
+            receipt.evidence[0],
+            status=VerificationStatus.PENDING,
+        )
+        pending = replace(receipt, evidence=(pending_evidence,), signature="")
+        pending = replace(pending, signature=self.verifier.sign_receipt(pending))
+        with self.assertRaisesRegex(ValueError, "pending"):
+            TrustGate.propagate(
+                claim,
+                self.spec,
+                pending,
+                self.verifier,
+                self.obligations,
+                lambda *_: None,
+            )
+
     def test_spec_attempt_and_protocol_mismatches_are_rejected(self) -> None:
         claim = Claim("worker", 1, "def add_one(value): return value + 1", "candidate")
         receipt = self.verifier.verify(claim, self.spec, self.obligations)
