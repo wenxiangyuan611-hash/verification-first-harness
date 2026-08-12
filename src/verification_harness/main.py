@@ -4,11 +4,11 @@ from __future__ import annotations
 
 from verification_harness.agents import CriticAgent, PlannerAgent, VerifierAgent, WorkerAgent
 from verification_harness.demo_task import (
+    DEMO_SPEC,
     FAULTY_CODE,
     PERSISTENT_BUG_CODE,
     PROCESS_EXIT_CODE,
     REPAIRED_CODE,
-    DEMO_SPEC,
 )
 from verification_harness.engine import TrustGateEngine
 

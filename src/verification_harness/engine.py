@@ -92,20 +92,28 @@ class TrustGateEngine:
             if receipt.is_passed:
                 self.state = TaskState.PASSED
                 self.log_state("[TRUST GATE] Claim verified and approved.")
+
+                def approved_result(
+                    approved_claim: Claim,
+                    approved_receipt: VerificationReceipt,
+                    verified_attempt: int = attempt,
+                ) -> dict[str, Any]:
+                    return {
+                        "status": "APPROVED",
+                        "final_state": self.state.value,
+                        "attempts": verified_attempt,
+                        "claim": approved_claim,
+                        "receipt": approved_receipt,
+                        "audit_trail": tuple(self.audit_trail),
+                    }
+
                 return TrustGate.propagate(
                     claim,
                     spec,
                     receipt,
                     self.verifier,
                     obligations,
-                    lambda approved_claim, approved_receipt: {
-                        "status": "APPROVED",
-                        "final_state": self.state.value,
-                        "attempts": attempt,
-                        "claim": approved_claim,
-                        "receipt": approved_receipt,
-                        "audit_trail": tuple(self.audit_trail),
-                    },
+                    approved_result,
                 )
 
             if attempt > self.max_repairs:

@@ -67,6 +67,8 @@ class SchemaTests(unittest.TestCase):
             canonical_json({"value": math.nan})
         with self.assertRaises(TypeError):
             canonical_json(object())
+        with self.assertRaises(TypeError):
+            canonical_json(Spec)
 
 
 if __name__ == "__main__":
