@@ -14,7 +14,7 @@ def _json_default(value: Any) -> Any:
     """Convert protocol values to a deterministic JSON representation."""
     if isinstance(value, Enum):
         return value.value
-    if is_dataclass(value):
+    if is_dataclass(value) and not isinstance(value, type):
         return asdict(value)
     raise TypeError(f"Protocol value is not JSON serializable: {type(value).__name__}")
 
