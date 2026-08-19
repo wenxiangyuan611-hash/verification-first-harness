@@ -72,6 +72,16 @@ reported `TimeoutError`, but cannot safely kill an arbitrary in-process thread t
 ignores cancellation. An untrusted provider with ambient host authority can also act
 outside `ActionGate`; complete mediation requires process or service isolation.
 
+The Codex adapter reduces ambient authority by defaulting to read-only and omitting
+full-access mode. It also selects deny-all approval and disables web search, apps,
+subagents, dependency installation, and workspace network access through supported
+configuration overrides. Named MCP servers inherited from local Codex configuration
+may still remain available because configuration tables merge rather than replace.
+Its explicit workspace-write mode is still an SDK sandbox, not a proof that the
+selected directory is disposable or isolated from trusted state.
+The controller must create and police that quarantine boundary out of band, and must
+not treat resulting filesystem changes as verified propagation.
+
 ## Built-in Python runner limitations
 
 The subprocess runner is a reliability boundary, not a hostile-code sandbox. It does

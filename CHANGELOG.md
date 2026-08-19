@@ -6,11 +6,29 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- An optional first-party `CodexAgentProvider` over the official `openai-codex`
+  Python SDK, constrained to the tested `0.147.x` API line.
+- A fixed Codex structured-output schema, fresh ephemeral threads, read-only default
+  sandbox, deny-all approval and restrictive external-tool overrides, and explicit
+  quarantined-directory requirement for workspace writes.
+- Fail-closed tests for missing SDKs, malformed and forged model output, duplicate
+  keys, oversized responses, SDK errors, and mutable schema attacks.
+- A runnable read-only Codex example that enters the same quarantine, independent
+  verifier, signed receipt, and artifact-gate path as other providers.
+
+### Changed
+
+- The development package version is now `0.3.0b1`.
+- The package status classifier and documentation now identify the current line as
+  beta while retaining the research-prototype warning.
+
 ### Planned
 
 - Pluggable container and microVM execution backends.
 - Parallel worker and critic orchestration.
-- First-party Codex, Claude, and OpenCode provider adapters.
+- First-party Claude and OpenCode provider adapters.
 - Durable append-only audit storage.
 
 ## [0.3.0-alpha.1] - 2026-08-19

@@ -52,9 +52,18 @@ threat model.
 - [x] CLI runtime demo and durable-record inspection
 - [x] End-to-end subprocess and restart replay tests
 
-## 0.3.0-beta — Real agent and coding-domain pilot
+## 0.3.0-beta.1 — First-party Codex pilot
 
-- [ ] First-party Codex and Claude provider examples with pinned wire contracts
+- [x] Optional first-party Codex Python SDK provider
+- [x] Fresh ephemeral thread and structured output for every agent request
+- [x] Read-only default; explicit quarantined directory for workspace writes
+- [x] Strict local re-parse and fail-closed malformed SDK result handling
+- [x] Deterministic fake-SDK tests that require no model account or usage
+- [x] Runnable read-only Codex-to-independent-verifier example
+
+## 0.3.0-beta — Remaining real-agent and coding-domain pilot
+
+- [ ] First-party Claude provider example with a versioned output contract
 - [ ] Repository, source-tree, Git patch, and build-artifact claim types
 - [ ] Pytest, compiler, type-checker, linter, schema, and browser verifier packs
 - [ ] Generic critic/challenge scheduling before verification

@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 from verification_harness.actions import ActionGate, AllowListActionPolicy
 from verification_harness.authority import (
@@ -12,6 +13,7 @@ from verification_harness.authority import (
     HMACReceiptAuthority,
     HMACSpecAuthority,
 )
+from verification_harness.codex_provider import CodexAgentProvider, CodexRunResult
 from verification_harness.decision import VerificationObligation
 from verification_harness.gate import ReplayError
 from verification_harness.kernel import VerificationKernel
@@ -49,6 +51,16 @@ class UnreadableProvider:
                 raise RuntimeError("cannot render")
 
         raise UnreadableError()
+
+
+class StaticCodexRunner:
+    def run(self, **kwargs: Any) -> CodexRunResult:
+        del kwargs
+        return CodexRunResult(
+            final_response=(
+                '{"payload_type":"application/json","payload":{"answer":42}}'
+            )
+        )
 
 
 class VerificationRuntimeTests(unittest.TestCase):
@@ -170,6 +182,31 @@ class VerificationRuntimeTests(unittest.TestCase):
             SQLiteReceiptUseStore(SQLiteRunStore(self.database)).consume(
                 result.attempts[-1].receipt
             )
+
+    def test_codex_provider_enters_the_same_quarantine_and_verification_flow(self) -> None:
+        runtime, store = self.runtime()
+        result = runtime.run(
+            proposal=self.proposal,
+            provider=CodexAgentProvider(
+                provider_id="codex-test-worker",
+                runner=StaticCodexRunner(),
+            ),
+            input_payload={"instruction": "answer independently"},
+            obligations=self.obligations,
+        )
+
+        self.assertEqual(Verdict.VERIFIED.value, result.verdict)
+        self.assertIsNotNone(result.artifact)
+        if result.artifact is None:
+            self.fail("verified Codex result did not contain an artifact")
+        self.assertEqual({"answer": 42}, result.artifact.payload)
+        claim_record = next(
+            record
+            for record in store.records(result.context.run_id)
+            if record.kind is RunRecordKind.CLAIM
+        )
+        self.assertIs(TrustLabel.QUARANTINED, claim_record.trust_label)
+        self.assertEqual("codex-test-worker", claim_record.payload["producer_id"])
 
     def test_denied_agent_action_never_invokes_provider_or_creates_claim(self) -> None:
         provider = CountingProvider()

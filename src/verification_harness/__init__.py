@@ -21,6 +21,13 @@ from verification_harness.authority import (
     ReceiptAuthority,
     SpecAuthority,
 )
+from verification_harness.codex_provider import (
+    CodexAgentProvider,
+    CodexRunner,
+    CodexRunResult,
+    CodexSandbox,
+    OfficialCodexRunner,
+)
 from verification_harness.decision import (
     CriterionTrace,
     Decision,
@@ -89,7 +96,7 @@ from verification_harness.verifiers import (
     VerifierRegistry,
 )
 
-__version__ = "0.3.0a1"
+__version__ = "0.3.0b1"
 
 __all__ = [
     "PROTOCOL_VERSION",
@@ -116,6 +123,10 @@ __all__ = [
     "ChallengePolicyError",
     "Claim",
     "ClaimEnvelope",
+    "CodexAgentProvider",
+    "CodexRunResult",
+    "CodexRunner",
+    "CodexSandbox",
     "CommandAgentProvider",
     "CommandVerifierPlugin",
     "ComponentFailure",
@@ -137,6 +148,7 @@ __all__ = [
     "KernelDecision",
     "Obligation",
     "Observation",
+    "OfficialCodexRunner",
     "ReceiptAuthority",
     "ReceiptUseStore",
     "ReplayError",

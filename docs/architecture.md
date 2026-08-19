@@ -85,6 +85,14 @@ authority. `CommandAgentProvider` is a local strict-JSON wire adapter: it sends 
 canonical request on stdin, expects exactly `payload_type` and `payload` on stdout,
 and never interpolates model output into a shell command.
 
+`CodexAgentProvider` is the first first-party SDK adapter. It maps each request to a
+fresh ephemeral Codex thread, requests the exact `AgentOutput` JSON Schema, and
+strictly re-parses the final response before returning it to the runtime. It defaults
+to read-only filesystem access, selects deny-all approval, disables optional external
+tools where the SDK exposes reliable overrides, and omits full-access mode. Even so,
+the provider remains outside the trusted computing base and cannot issue evidence or
+receipts.
+
 ## Action policy plane
 
 Action authorization and claim verification answer different questions:
@@ -107,7 +115,7 @@ Unsupported kinds, plugin exceptions, malformed observations, identity mismatche
 and denied verifier actions become explicit `ERROR` observations. A plugin never
 computes the final verdict.
 
-The alpha `CommandVerifierPlugin` executes an authorized argv list without a shell
+The beta `CommandVerifierPlugin` executes an authorized argv list without a shell
 and sends the canonical claim envelope on stdin. It is suitable for local
 deterministic tools, but it is not a container or hostile-code sandbox.
 
@@ -184,7 +192,8 @@ and tools must be reviewed independently.
 ## Remaining architectural boundary
 
 The kernel and runtime are domain-neutral, but orchestration is still sequential.
-The alpha provides a generic command verifier rather than first-party Codex, Claude,
-or repository adapters. Container isolation, a generic challenge scheduler,
-durable hash-chained audit, parallel branches, receipt-gated DAG scheduling, and
-non-code verifier packs remain roadmap work.
+The beta provides a first-party Codex candidate provider and a generic command
+verifier, but not yet first-party Claude or repository claim adapters. Container
+isolation, a generic challenge scheduler, durable hash-chained audit, parallel
+branches, receipt-gated DAG scheduling, and non-code verifier packs remain roadmap
+work.

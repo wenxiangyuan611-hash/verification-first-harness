@@ -1,12 +1,12 @@
 # Invariant Coverage
 
-This matrix maps the project's seven principles to concrete 0.3.0-alpha controls. It is a
+This matrix maps the project's seven principles to concrete 0.3.0-beta controls. It is a
 claim about the stated protocol boundary, not about arbitrary code running with the
 same operating-system authority as the controller.
 
-| Principle | 0.3.0-alpha control | Representative tests |
+| Principle | 0.3.0-beta control | Representative tests |
 | --- | --- | --- |
-| Every agent is untrusted | Every provider result must become a detached `AgentOutput` and then a quarantined `ClaimEnvelope`; providers never issue evidence or receipts. | provider shape tests, `test_all_agent_roles_use_the_same_claim_envelope` |
+| Every agent is untrusted | Every provider result, including Codex SDK output, must become a detached `AgentOutput` and then a quarantined `ClaimEnvelope`; providers never issue evidence or receipts. | Codex/provider shape tests, `test_all_agent_roles_use_the_same_claim_envelope` |
 | Every output is a claim, not a fact | `SpecProposal` has no authority; SQLite persists agent payloads with `QUARANTINED`, never `VERIFIED`. | runtime persistence and protocol detachment tests |
 | No unverified claim propagates | Failed runtime attempts omit raw payloads; only `ArtifactTrustGate` issues a payload-carrying `VerifiedArtifact`. | runtime repair integration, forbidden artifact construction tests |
 | Challenge previous work | The Python `Critic` proposes bounded falsification obligations; generic repair claims point to their rejected parent. Generic challenge scheduling remains beta work. | critic policy tests, runtime repair lineage test |
@@ -16,7 +16,7 @@ same operating-system authority as the controller.
 
 ## Important qualification
 
-The generic protocol can envelope every listed role, but the 0.3.0-alpha runtime
+The generic protocol can envelope every listed role, but the 0.3.0-beta runtime
 schedules one provider sequentially and its generic path does not yet invoke a
 Critic. The original Python adapter still demonstrates explicit challenge. Generic
 challenge scheduling is planned for 0.3.0-beta and parallel receipt-gated DAG

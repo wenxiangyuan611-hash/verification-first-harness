@@ -3,11 +3,12 @@
 一个面向 Agent 工作流的实验性信任内核：**所有 Agent 输出默认都是不可信 Claim，
 只有经过独立验证的 Artifact 才能向下游传播。**
 
-项目优化的目标是错误隔离，而不是 Agent 数量。0.3.0 Alpha 在 0.2.0 通用信任协议之上
-增加了与厂商无关的串行 Runtime、失败关闭的动作授权、验证器插件和带信任标签的 SQLite
-持久化。原有 Python 编码闭环作为兼容的参考适配器继续保留。
+项目优化的目标是错误隔离，而不是 Agent 数量。0.3.0 Beta 在 0.2.0 通用信任协议之上
+增加了与厂商无关的串行 Runtime、第一方 Codex SDK Provider、失败关闭的动作授权、
+验证器插件和带信任标签的 SQLite 持久化。原有 Python 编码闭环作为兼容的参考适配器
+继续保留。
 
-> 当前状态：Alpha / 研究原型。1.0 前协议和公共 API 可能调整。内置 Python
+> 当前状态：Beta / 研究原型。1.0 前协议和公共 API 可能调整。内置 Python
 > 子进程执行器不是恶意代码安全沙箱。
 
 [English](README.md)
@@ -45,10 +46,13 @@ flowchart LR
     F --> C
 ```
 
-## 0.3.0 Alpha 新增能力
+## 0.3.0 Beta 新增能力
 
 - 与厂商无关的 `AgentProvider`、`AgentRequest` 和分离式 `AgentOutput`；
 - 使用 stdin/stdout 严格 JSON、禁止 Shell 插值的 `CommandAgentProvider`；
+- 基于 OpenAI [官方 Python SDK](https://developers.openai.com/codex/sdk) 的可选
+  `CodexAgentProvider`，每次请求使用新的临时 Thread、结构化输出、默认只读沙箱和
+  限权后的审批/工具配置；
 - 在 Agent 和 Verifier 执行前运行的 `ActionGate`，默认拒绝未列入允许表的动作；
 - `VerifierRegistry` 和有超时、输出限制的 `CommandVerifierPlugin`；
 - 有界的拒绝、修复和重新验证 `VerificationRuntime`；
@@ -77,7 +81,7 @@ flowchart LR
 
 可直接运行的通用内核最小示例位于
 [`examples/generic_kernel.py`](examples/generic_kernel.py)。
-Provider 线协议、信任标签和 Alpha 安全边界请查看
+Provider 线协议、Codex 直接接入、信任标签和 Beta 安全边界请查看
 [Verification Runtime 指南](docs/runtime.md)。
 
 ## 快速开始
@@ -106,6 +110,57 @@ mypy src
 pytest
 python -m build
 ```
+
+## 直接接入 Codex SDK
+
+安装可选的官方 SDK 集成：
+
+```bash
+python -m pip install -e ".[codex]"
+```
+
+然后在任何接受 `AgentProvider` 的位置传入 `CodexAgentProvider`：
+
+```python
+from pathlib import Path
+
+from verification_harness import CodexAgentProvider, CodexSandbox
+
+codex_worker = CodexAgentProvider(
+    provider_id="codex/worker",
+    cwd=Path.cwd(),
+    sandbox=CodexSandbox.READ_ONLY,
+)
+
+result = runtime.run(
+    proposal=proposal,
+    provider=codex_worker,
+    input_payload={"instruction": "提出一个候选补丁"},
+    obligations=obligations,
+    max_repairs=1,
+)
+```
+
+官方 SDK 会复用本机已有的 Codex 登录；适配器不会读取、保存或打印凭据。Codex
+返回的仍是不可信候选结果，只有通过独立验证后的 `result.artifact` 才拥有传播权限。
+
+适配器会选择 Codex 的 `deny_all` 审批模式，并通过 SDK 配置覆盖禁用 Web Search、
+App、Sub-Agent、依赖自动安装和 Workspace 网络。当前 Codex 的配置合并机制还不能
+可靠清除用户本机配置中所有具名 MCP Server；生产运行仍需要干净的 Codex 配置目录，
+或外层进程/容器隔离。
+
+`CodexSandbox.WORKSPACE_WRITE` 必须显式指定目录，并且只能指向可丢弃或已隔离的
+Worktree：候选生成阶段产生的文件改动本身不是已验证 Artifact。适配器有意不开放
+Codex 的 `full_access`。
+
+安装可选依赖后，可以运行完整的只读 Codex → 隔离区 → 独立验证器 → 收据门控示例：
+
+```bash
+python examples/codex_runtime.py
+```
+
+该命令会使用你已有的 Codex 账号进行一次真实模型调用。最终 JSON 会列出每次尝试的
+Verdict，并且只有 `artifact` 字段可能携带获准传播的内容。
 
 ## Python 编码闭环示例
 
@@ -151,11 +206,12 @@ assert result["artifact"] is not None
 
 ## 不同模型与不同领域
 
-Runtime 依赖结构化接口，而不是某一家模型 API。SDK 可以通过 `CallableAgentProvider`
-接入；本地 Codex、Claude、Grok 或其他 CLI 可以使用严格的 `CommandAgentProvider`
-协议。应用可以在这些接口上封装 GPT Planner、Grok Worker 和 Claude Critic，但当前
-Alpha 运行时每次运行只调用一个 Provider，尚未把它们调度到同一工作流。多模型可以降低相关
-错误，但不能替代独立证据，也不能授予传播权限。
+Runtime 依赖结构化接口，而不是某一家模型 API。Codex 可以直接使用第一方
+`CodexAgentProvider`；其他 SDK 可以通过 `CallableAgentProvider` 接入；本地 Claude、
+Grok、OpenCode 或其他 CLI 可以使用严格的 `CommandAgentProvider` 协议。应用可以在
+这些接口上封装 GPT Planner、Grok Worker 和 Claude Critic，但当前 Beta 运行时每次
+运行只调用一个 Provider，尚未把它们调度到同一工作流。多模型可以降低相关错误，但
+不能替代独立证据，也不能授予传播权限。
 
 通用 `VerificationKernel` 不局限于 Python 源码。它使用独立的 JSON 负载，因此适配器
 可以表示计划、研究结论、数学答案、文档、代码补丁或其他领域。但每个领域都必须提供：
@@ -174,7 +230,7 @@ Alpha 运行时每次运行只调用一个 Provider，尚未把它们调度到�
 验证工具和候选程序需要进程、容器、microVM、虚拟机或操作系统级隔离，并限制凭据、
 网络、文件系统、CPU、内存、磁盘、输出量和进程数。
 
-Alpha 版 SQLite 运行和收据存储可以跨本地控制器重启持久化，但不是经过认证的分布式
+Beta 版 SQLite 运行和收据存储可以跨本地控制器重启持久化，但不是经过认证的分布式
 安全服务；哈希链审计存储仍是单进程实现。生产部署需要事务型分布式存储、外部密钥
 管理和加固后的验证器边界。
 
@@ -182,9 +238,10 @@ Alpha 版 SQLite 运行和收据存储可以跨本地控制器重启持久化，
 
 ## 当前限制
 
-0.3.0 Alpha 尚未内置 Codex/Claude SDK 客户端、容器执行后端、持久化哈希链审计、
-通用 Critic 调度、多 Worker 并行、收据门控 DAG 或非代码领域包。命令适配器会继承
-调用者环境，输出限制也在捕获后检查，因此不是恶意进程安全沙箱。Python 兼容适配器
-目前把旧检查较粗粒度地映射到验收标准；新领域适配器应建立更精确的追踪关系。
+0.3.0 Beta 尚未内置第一方 Claude SDK 客户端、容器执行后端、持久化哈希链审计、
+通用 Critic 调度、多 Worker 并行、收据门控 DAG 或非代码领域包。Codex SDK 调用
+目前依赖 SDK 自身的取消机制，其 Workspace Write 模式也不是容器边界。命令适配器会
+继承调用者环境，输出限制也在捕获后检查，因此不是恶意进程安全沙箱。Python 兼容
+适配器目前把旧检查较粗粒度地映射到验收标准；新领域适配器应建立更精确的追踪关系。
 
 后续工作请查看[路线图](docs/roadmap.md)。项目使用 Apache-2.0 许可证。

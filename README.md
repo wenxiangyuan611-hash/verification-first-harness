@@ -3,12 +3,13 @@
 An experimental trust kernel for agent workflows where **every agent output is an
 untrusted claim** and only an independently verified artifact may propagate.
 
-The project optimizes for error containment rather than agent count. The 0.3.0 alpha
-adds a provider-neutral sequential runtime, fail-closed action authorization,
-verifier plugins, and durable SQLite trust labels around the domain-neutral 0.2.0
-protocol. The original Python coding loop remains as a compatible reference adapter.
+The project optimizes for error containment rather than agent count. The 0.3.0 beta
+adds a provider-neutral sequential runtime, a first-party Codex SDK provider,
+fail-closed action authorization, verifier plugins, and durable SQLite trust labels
+around the domain-neutral 0.2.0 protocol. The original Python coding loop remains as
+a compatible reference adapter.
 
-> Status: **alpha / research prototype**. The protocol and public API may change
+> Status: **beta / research prototype**. The protocol and public API may change
 > before 1.0. The built-in Python subprocess runner is not a hostile-code sandbox.
 
 [简体中文](README.zh-CN.md)
@@ -47,11 +48,15 @@ flowchart LR
     F --> C
 ```
 
-## What the 0.3.0 alpha adds
+## What the 0.3.0 beta adds
 
 - Provider-neutral `AgentProvider`, `AgentRequest`, and detached `AgentOutput` values.
 - A local `CommandAgentProvider` wire adapter that uses strict JSON over stdin/stdout
   without shell interpolation.
+- An optional `CodexAgentProvider` over OpenAI's
+  [official Python SDK](https://developers.openai.com/codex/sdk), with a fresh
+  ephemeral thread per request, structured output, a read-only default sandbox, and
+  restrictive approval/tool configuration.
 - `ActionGate` decisions for agent and verifier invocation, with default-deny
   allow-list policy and optional independent approval.
 - A `VerifierRegistry` and bounded `CommandVerifierPlugin` for deterministic external
@@ -88,7 +93,7 @@ the exact guarantees and assumptions.
 A complete minimal generic flow is available in
 [`examples/generic_kernel.py`](examples/generic_kernel.py).
 See the [verification runtime guide](docs/runtime.md) for the provider wire contract,
-trust labels, and alpha security boundary.
+direct Codex setup, trust labels, and beta security boundary.
 
 ## Quick start
 
@@ -116,6 +121,61 @@ mypy src
 pytest
 python -m build
 ```
+
+## Direct Codex SDK provider
+
+Install the optional official SDK integration:
+
+```bash
+python -m pip install -e ".[codex]"
+```
+
+Then pass `CodexAgentProvider` anywhere an `AgentProvider` is accepted:
+
+```python
+from pathlib import Path
+
+from verification_harness import CodexAgentProvider, CodexSandbox
+
+codex_worker = CodexAgentProvider(
+    provider_id="codex/worker",
+    cwd=Path.cwd(),
+    sandbox=CodexSandbox.READ_ONLY,
+)
+
+result = runtime.run(
+    proposal=proposal,
+    provider=codex_worker,
+    input_payload={"instruction": "propose a candidate patch"},
+    obligations=obligations,
+    max_repairs=1,
+)
+```
+
+The official SDK reuses an existing local Codex login. The adapter does not read,
+store, or print credentials. Codex still returns only an untrusted candidate; only
+`result.artifact` has propagation authority after independent verification.
+
+The adapter selects Codex's `deny_all` approval mode and disables web search, apps,
+subagents, dependency installation, and workspace network access through SDK config
+overrides. Current Codex configuration merging cannot reliably erase every named MCP
+server inherited from a user's local config; production runs still need a clean
+Codex profile/home or an outer process/container boundary.
+
+`CodexSandbox.WORKSPACE_WRITE` requires an explicit directory. Use only a disposable
+or quarantined worktree: filesystem writes happen during candidate generation and
+are not themselves verified artifacts. The adapter intentionally does not expose
+Codex `full_access`.
+
+After installing the extra, run the complete read-only Codex → quarantine →
+independent verifier → receipt gate example with:
+
+```bash
+python examples/codex_runtime.py
+```
+
+This command makes a real model call using your existing Codex account. Its final
+JSON reports every attempt verdict and exposes a payload only under `artifact`.
 
 ## Python coding-loop example
 
@@ -162,11 +222,12 @@ always return `artifact=None`.
 
 ## Connecting different models and domains
 
-The runtime depends on structural interfaces, not a model API. SDK integrations can
-use `CallableAgentProvider`; local Codex, Claude, Grok, or other CLI wrappers can use
+The runtime depends on structural interfaces, not a model API. Codex can use the
+first-party `CodexAgentProvider`; other SDK integrations can use
+`CallableAgentProvider`; local Claude, Grok, OpenCode, or other CLI wrappers can use
 the strict `CommandAgentProvider` wire contract. Applications can build GPT-backed
 Planner, Grok-backed Worker, and Claude-backed Critic adapters over these interfaces,
-but the alpha runtime invokes one provider per run and does not yet schedule them
+but the beta runtime invokes one provider per run and does not yet schedule them
 together.
 Model diversity can reduce correlated failures, but it never replaces independent
 evidence or grants propagation authority.
@@ -192,7 +253,7 @@ verification tools, and candidate programs therefore require process, container,
 microVM, VM, or OS-level isolation with no ambient credentials and explicit
 network, filesystem, CPU, memory, disk, output, and process limits.
 
-The alpha SQLite run and receipt stores are durable for one local controller, but
+The beta SQLite run and receipt stores are durable for one local controller, but
 they are not authenticated distributed security services. The hash-chained audit
 sink remains process-local. Production deployments need transactional distributed
 storage, external key management, and a hardened verifier boundary.
@@ -201,13 +262,14 @@ Report security issues according to [SECURITY.md](SECURITY.md).
 
 ## Current limitations
 
-The 0.3.0 alpha does not yet ship first-party Codex or Claude SDK clients, a container
+The 0.3.0 beta does not yet ship a first-party Claude SDK client, a container
 execution backend, durable hash-chained audit storage, generic challenge-agent
 scheduling, parallel workers, receipt-gated DAG scheduling, or non-code domain
-packs. Command adapters inherit the caller environment and their output limits are
-post-capture bounds, so they are not hardened hostile-process sandboxes. The Python
-compatibility adapter maps legacy checks to criteria coarsely; domain-specific
-adapters should define precise traces.
+packs. The Codex SDK call currently relies on the SDK for cancellation, and its
+workspace-write mode is not a container boundary. Command adapters inherit the
+caller environment and their output limits are post-capture bounds, so they are not
+hardened hostile-process sandboxes. The Python compatibility adapter maps legacy
+checks to criteria coarsely; domain-specific adapters should define precise traces.
 
 These boundaries are tracked in the [roadmap](docs/roadmap.md).
 

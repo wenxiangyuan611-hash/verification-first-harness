@@ -1,6 +1,6 @@
 # Verification Runtime
 
-The 0.3.0 alpha runtime composes an untrusted agent provider with an action policy,
+The 0.3.0 beta runtime composes an untrusted agent provider with an action policy,
 quarantine store, independent verifier plugins, and the 0.2.0 trust kernel.
 
 ## Run the reference flow
@@ -57,6 +57,65 @@ SDK integrations should use `CallableAgentProvider` and return an `AgentOutput`.
 Their own timeout, credential, and isolation controls remain the integrator's
 responsibility.
 
+## First-party Codex SDK provider
+
+Install the optional dependency and import the provider directly:
+
+```bash
+python -m pip install -e ".[codex]"
+```
+
+```python
+from pathlib import Path
+
+from verification_harness import CodexAgentProvider, CodexSandbox
+
+provider = CodexAgentProvider(
+    provider_id="codex/worker",
+    cwd=Path.cwd(),
+    sandbox=CodexSandbox.READ_ONLY,
+)
+```
+
+`CodexAgentProvider` uses the official
+[`openai-codex` Python SDK](https://developers.openai.com/codex/sdk) and its existing
+local authentication. The beta extra is constrained to the tested `0.147.x` SDK
+line. It creates a fresh ephemeral thread for every
+`AgentRequest`, passes a fixed JSON Schema to `thread.run(output_schema=...)`, and
+then independently applies the harness's duplicate-key and exact-shape parser to
+`final_response`. Missing responses, SDK errors, extra fields, duplicate keys,
+oversized responses, and malformed runner values fail before claim creation.
+
+The runner also selects `ApprovalMode.deny_all` and applies restrictive Codex
+configuration overrides: web search, apps, subagents, skill dependency installation,
+workspace network access, login shells, history persistence, and startup update
+checks are disabled; shell environment inheritance is reduced to `core`. These are
+defense-in-depth controls, not a complete outer sandbox. In particular, current
+Codex config merging cannot reliably replace an inherited table of individually
+named MCP servers. Use a clean Codex profile/home or an external execution boundary
+when local MCP configuration is outside the controller's trust policy.
+
+The default is `CodexSandbox.READ_ONLY`. `WORKSPACE_WRITE` requires an explicit
+existing `cwd`; point it only at a disposable or quarantined worktree. The adapter
+does not expose `full_access`. A writable Codex thread may change files before its
+final claim is verified, so those files must remain outside trusted downstream
+state until an independent verifier accepts the claim and the gate issues a
+`VerifiedArtifact`.
+
+The synchronous adapter currently relies on the SDK for cancellation and app-server
+termination. A production controller still needs a process, container, VM, or
+remote-service boundary with an external wall-clock deadline.
+
+A complete live example is available at
+[`examples/codex_runtime.py`](../examples/codex_runtime.py). It uses a read-only
+Codex provider, quarantines the candidate, checks it in an independent Python
+process, and prints payload only from the resulting verified artifact. Running it
+makes a real Codex model call using the caller's existing account:
+
+```bash
+python examples/codex_runtime.py
+```
+
 ## Command verifier obligation
 
 The alpha command verifier supports `command.exit_code` obligations:
@@ -91,7 +150,7 @@ but failed `RuntimeAttempt` results expose only IDs, digests, evidence, and rece
 This allows repair inside the work zone without treating the failed payload as a
 trusted downstream fact.
 
-## Alpha security boundary
+## Beta security boundary
 
 The command provider and command verifier are local subprocess adapters, not hostile
 code sandboxes. They inherit the configured environment, can access ambient host
