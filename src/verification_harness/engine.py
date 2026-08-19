@@ -9,10 +9,11 @@ from typing import Any
 from verification_harness.audit import AuditKind
 from verification_harness.authority import EvidenceAuthority
 from verification_harness.boundary import AgentCallBoundary, ComponentCallError
+from verification_harness.evidence import EvidenceBundle
 from verification_harness.interfaces import Critic, Planner, Verifier, Worker
-from verification_harness.kernel import VerificationKernel
+from verification_harness.kernel import KernelDecision, VerificationKernel
 from verification_harness.policy import ChallengePolicy, ChallengePolicyError
-from verification_harness.protocol import RunContext, Verdict
+from verification_harness.protocol import ClaimEnvelope, RunContext, Verdict
 from verification_harness.python_adapter import (
     claim_to_envelope,
     compatibility_kernel,
