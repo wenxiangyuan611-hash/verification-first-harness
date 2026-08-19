@@ -24,9 +24,9 @@ from verification_harness.gate import (
     InMemoryReceiptUseStore,
     ReceiptUseStore,
     ReplayError,
-    TrustGate as ArtifactTrustGate,
     VerifiedArtifact,
 )
+from verification_harness.gate import TrustGate as ArtifactTrustGate
 from verification_harness.kernel import KernelDecision, VerificationKernel
 from verification_harness.policy import ChallengePolicy, ChallengePolicyError
 from verification_harness.protocol import (

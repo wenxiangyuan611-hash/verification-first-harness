@@ -477,15 +477,18 @@ class TrustGateEngine:
                     approved_claim: Claim,
                     approved_receipt: VerificationReceipt,
                     verified_attempt: int = attempt,
+                    claim_snapshot: ClaimEnvelope = claim_envelope,
+                    evidence_snapshot: EvidenceBundle = evidence_bundle,
+                    decision_snapshot: KernelDecision = kernel_decision,
                 ) -> dict[str, Any]:
                     self.state = TaskState.PASSED
                     self.log_state("[TRUST GATE] Claim verified and approved.")
                     artifact = self.kernel.trust_gate.propagate(
                         context,
                         authorized_spec,
-                        claim_envelope,
-                        evidence_bundle,
-                        kernel_decision.receipt,
+                        claim_snapshot,
+                        evidence_snapshot,
+                        decision_snapshot.receipt,
                     )
                     return {
                         "status": "APPROVED",
@@ -494,9 +497,9 @@ class TrustGateEngine:
                         "claim": approved_claim,
                         "receipt": approved_receipt,
                         "failure": None,
-                        "verdict": kernel_decision.verdict,
+                        "verdict": decision_snapshot.verdict,
                         "artifact": artifact,
-                        "decision_receipt": kernel_decision.receipt,
+                        "decision_receipt": decision_snapshot.receipt,
                         "context": context,
                         "audit_trail": tuple(self.audit_trail),
                     }
