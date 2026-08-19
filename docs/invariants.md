@@ -1,22 +1,23 @@
 # Invariant Coverage
 
-This matrix maps the project's seven principles to concrete 0.2.0 controls. It is a
+This matrix maps the project's seven principles to concrete 0.3.0-alpha controls. It is a
 claim about the stated protocol boundary, not about arbitrary code running with the
 same operating-system authority as the controller.
 
-| Principle | 0.2.0 control | Representative tests |
+| Principle | 0.3.0-alpha control | Representative tests |
 | --- | --- | --- |
-| Every agent is untrusted | Every supported role uses `ClaimEnvelope`; agent APIs cross fail-closed component boundaries. | `test_all_agent_roles_use_the_same_claim_envelope`, containment tests |
-| Every output is a claim, not a fact | `SpecProposal` has no authority; `ClaimEnvelope` is quarantined and detached. | `test_spec_proposal_requires_independent_authorization`, `test_claim_envelope_is_role_neutral_and_detaches_payload` |
-| No unverified claim propagates | Generic failed decisions omit raw claims; only `ArtifactTrustGate` issues `VerifiedArtifact`. | `test_non_verified_verdicts_never_carry_claim_payload`, `test_artifact_cannot_be_constructed_outside_trust_gate` |
-| Challenge previous work | Python `Critic` proposes bounded falsification obligations; repair claims point to their failed parent. | `test_default_worker_stub_is_challenged_and_rejected`, repair-lineage integration test |
-| Prefer independent verification | Evidence has a separate authenticated authority; deterministic policy—not an agent—computes verdicts. | evidence forgery, trace coverage, and observation-order tests |
-| Failure → repair → re-verification | Rejected authenticated evidence may enter the bounded repair loop; each attempt receives a new claim and receipt. | `test_failure_repair_and_reverification_is_normal_control_flow` |
-| Optimize error containment | Strict shape checks, signature binding, replay protection, explicit non-success verdicts, and audit history fail closed. | replay, receipt tamper, component failure, and policy-boundary tests |
+| Every agent is untrusted | Every provider result must become a detached `AgentOutput` and then a quarantined `ClaimEnvelope`; providers never issue evidence or receipts. | provider shape tests, `test_all_agent_roles_use_the_same_claim_envelope` |
+| Every output is a claim, not a fact | `SpecProposal` has no authority; SQLite persists agent payloads with `QUARANTINED`, never `VERIFIED`. | runtime persistence and protocol detachment tests |
+| No unverified claim propagates | Failed runtime attempts omit raw payloads; only `ArtifactTrustGate` issues a payload-carrying `VerifiedArtifact`. | runtime repair integration, forbidden artifact construction tests |
+| Challenge previous work | The Python `Critic` proposes bounded falsification obligations; generic repair claims point to their rejected parent. Generic challenge scheduling remains beta work. | critic policy tests, runtime repair lineage test |
+| Prefer independent verification | Verifier plugins run behind a separate action boundary, evidence authority, and deterministic policy. | command verifier, denied verifier, forgery, and trace tests |
+| Failure → repair → re-verification | Only signed `REJECTED` decisions enter the bounded loop; each attempt receives a new claim, evidence bundle, and receipt. | real subprocess failure/repair/re-verification test |
+| Optimize error containment | Action-policy failures, plugin failures, malformed output, replay, and storage tampering fail closed without promoting a claim. | action gate, registry containment, durable replay, and SQLite tamper tests |
 
 ## Important qualification
 
-The generic protocol can envelope every listed role, but 0.2.0 does not yet schedule
-all of them through a parallel graph. The built-in executable workflow remains the
-sequential Python Planner/Worker/Critic/Verifier adapter. Parallel receipt-gated DAG
-execution is planned for 0.4.0.
+The generic protocol can envelope every listed role, but the 0.3.0-alpha runtime
+schedules one provider sequentially and its generic path does not yet invoke a
+Critic. The original Python adapter still demonstrates explicit challenge. Generic
+challenge scheduling is planned for 0.3.0-beta and parallel receipt-gated DAG
+execution for 0.4.0.

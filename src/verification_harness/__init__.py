@@ -1,5 +1,15 @@
 """Public API for the verification-first agent harness."""
 
+from verification_harness.actions import (
+    ActionDecision,
+    ActionDenied,
+    ActionGate,
+    ActionPolicy,
+    ActionRequest,
+    ActionVerdict,
+    AllowListActionPolicy,
+    ApprovalResolver,
+)
 from verification_harness.audit import AuditEvent, AuditKind, AuditSink, InMemoryAuditSink
 from verification_harness.authority import (
     EvidenceAuthority,
@@ -28,6 +38,13 @@ from verification_harness.gate import (
 )
 from verification_harness.gate import TrustGate as ArtifactTrustGate
 from verification_harness.kernel import KernelDecision, VerificationKernel
+from verification_harness.persistence import (
+    RunRecordKind,
+    SQLiteReceiptUseStore,
+    SQLiteRunStore,
+    StoredRunRecord,
+    TrustLabel,
+)
 from verification_harness.policy import ChallengePolicy, ChallengePolicyError
 from verification_harness.protocol import (
     PROTOCOL_VERSION,
@@ -41,7 +58,20 @@ from verification_harness.protocol import (
     SpecProposal,
     Verdict,
 )
+from verification_harness.providers import (
+    AgentOutput,
+    AgentProvider,
+    AgentRequest,
+    CallableAgentProvider,
+    CommandAgentProvider,
+)
 from verification_harness.receipts import DecisionReceipt
+from verification_harness.runtime import (
+    AgentInvocationError,
+    RuntimeAttempt,
+    RuntimeResult,
+    VerificationRuntime,
+)
 from verification_harness.schema import (
     Claim,
     ComponentFailure,
@@ -53,13 +83,30 @@ from verification_harness.schema import (
     VerificationReceipt,
     VerificationStatus,
 )
+from verification_harness.verifiers import (
+    CommandVerifierPlugin,
+    VerifierPlugin,
+    VerifierRegistry,
+)
 
-__version__ = "0.2.0"
+__version__ = "0.3.0a1"
 
 __all__ = [
     "PROTOCOL_VERSION",
     "AcceptanceCriterion",
+    "ActionDecision",
+    "ActionDenied",
+    "ActionGate",
+    "ActionPolicy",
+    "ActionRequest",
+    "ActionVerdict",
+    "AgentInvocationError",
+    "AgentOutput",
+    "AgentProvider",
+    "AgentRequest",
     "AgentRole",
+    "AllowListActionPolicy",
+    "ApprovalResolver",
     "ArtifactTrustGate",
     "AuditEvent",
     "AuditKind",
@@ -69,6 +116,8 @@ __all__ = [
     "ChallengePolicyError",
     "Claim",
     "ClaimEnvelope",
+    "CommandAgentProvider",
+    "CommandVerifierPlugin",
     "ComponentFailure",
     "CriterionTrace",
     "Decision",
@@ -91,20 +140,31 @@ __all__ = [
     "ReceiptAuthority",
     "ReceiptUseStore",
     "ReplayError",
+    "RunRecordKind",
     "RunContext",
+    "RuntimeAttempt",
+    "RuntimeResult",
+    "SQLiteReceiptUseStore",
+    "SQLiteRunStore",
     "Spec",
     "SpecAuthorization",
     "SpecAuthority",
     "SpecProposal",
     "TaskState",
     "TestCase",
+    "TrustLabel",
     "TrustGate",
     "TrustGateEngine",
     "Verdict",
     "VerificationKernel",
     "VerificationObligation",
     "VerificationReceipt",
+    "VerificationRuntime",
     "VerificationStatus",
+    "VerifierPlugin",
+    "VerifierRegistry",
     "VerifiedArtifact",
+    "CallableAgentProvider",
+    "StoredRunRecord",
     "__version__",
 ]

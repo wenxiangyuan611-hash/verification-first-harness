@@ -6,11 +6,33 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- A provider-neutral `VerificationRuntime` with bounded rejection, repair, and
+  re-verification control flow.
+- Detached `AgentRequest` and `AgentOutput` values, a callable SDK adapter, and a
+  strict-JSON local command provider that does not invoke a shell.
+- A fail-closed `ActionGate` with allow, deny, and independent-approval verdicts.
+- A verifier plugin registry and external command verifier over canonical claim
+  envelopes.
+- SQLite persistence for contexts, authorized specs, quarantined claims,
+  authenticated evidence, decision receipts, verified artifacts, and single-use
+  receipt consumption across local controller restarts.
+- A runtime demo/inspection CLI and adversarial tests for action denial, malformed
+  providers, verifier failures, storage tampering, and restart replay.
+
+### Changed
+
+- The development package version is now `0.3.0a1`.
+- The 0.3 roadmap now targets a general agent verification runtime; repository code
+  review is one domain pack rather than the project identity.
+
 ### Planned
 
 - Pluggable container and microVM execution backends.
 - Parallel worker and critic orchestration.
-- Durable replay and append-only audit stores.
+- First-party Codex and Claude provider examples.
+- Durable append-only audit storage.
 
 ## [0.2.0] - 2026-08-13
 

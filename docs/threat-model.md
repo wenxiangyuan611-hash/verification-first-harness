@@ -9,6 +9,8 @@
 - A successful receipt must be consumable at most once.
 - Failed evidence must be authenticated before it may influence repair.
 - One untrusted component failure must fail closed instead of bypassing the controller.
+- A denied or approval-required action must not invoke its controlled operation.
+- Persistence must not upgrade a quarantined value into a verified value.
 - Audit events must expose decision and propagation history without claim promotion.
 
 ## Adversaries and faults
@@ -35,6 +37,11 @@ integration errors.
 - full receipt revalidation before propagation;
 - fresh context nonce plus atomic single-use receipt consumption;
 - no raw claim in generic failed `KernelDecision` values;
+- provider output is converted to a quarantined claim before verification;
+- default-deny action policy before agent and verifier invocation;
+- verifier plugin exceptions and unsupported kinds become `ERROR` evidence;
+- durable SQLite trust labels with payload-digest validation on read;
+- transactional single-use receipt consumption across local process restarts;
 - hash-chained, lock-serialized audit events;
 - fail-closed component shape, identity, signature, and policy checks;
 - bounded critic obligation types and payloads in the Python adapter;
@@ -59,9 +66,11 @@ memory, import private names, or monkey-patch modules. `VerifiedArtifact` preven
 ordinary callers from constructing an approved value through the public constructor,
 but process isolation is required against a malicious local module.
 
-Provider adapters also need their own request timeouts. The controller can contain a
+Command providers have request timeouts, but callable SDK adapters still depend on
+the SDK or isolation boundary to honor cancellation. The controller can contain a
 reported `TimeoutError`, but cannot safely kill an arbitrary in-process thread that
-ignores cancellation.
+ignores cancellation. An untrusted provider with ambient host authority can also act
+outside `ActionGate`; complete mediation requires process or service isolation.
 
 ## Built-in Python runner limitations
 
@@ -84,11 +93,13 @@ Authority keys must never enter candidate or agent execution environments.
 
 ## Persistence and distributed deployment
 
-The included replay registry and audit sink live in one process. They do not protect
-against process restart, multiple unsynchronized controller instances, storage
-rollback, or host compromise. Production deployments require atomic durable receipt
-consumption, authenticated audit persistence, external key management, and explicit
-failure behavior when those dependencies are unavailable.
+`SQLiteReceiptUseStore` protects local receipt consumption across process restarts,
+and `SQLiteRunStore` detects simple payload changes when records are read. They do
+not prevent database rollback, direct coordinated rewriting of payload and digest,
+multiple hosts using copied database files, or host compromise. The hash-chained
+audit sink remains in memory. Production deployments require protected transactional
+storage, authenticated append-only audit persistence, external key management, and
+explicit failure behavior when those dependencies are unavailable.
 
 ## Residual risks
 
@@ -98,4 +109,5 @@ failure behavior when those dependencies are unavailable.
 - correlated verifier failures that pass the same wrong assumption;
 - denial of service through expensive workloads or unavailable dependencies;
 - privacy leakage if claims, evidence, or audit details contain sensitive data;
+- action-policy bypass through execution paths not mediated by `ActionGate`;
 - false confidence from treating `INCONCLUSIVE` as success outside the kernel.
