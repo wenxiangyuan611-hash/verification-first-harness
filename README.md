@@ -150,6 +150,8 @@ from verification_harness import CodexAgentProvider, CodexSandbox
 codex_worker = CodexAgentProvider(
     provider_id="codex/worker",
     cwd=Path.cwd(),
+    codex_home=Path("work/codex-home"),
+    sqlite_home=Path("work/codex-state"),
     sandbox=CodexSandbox.READ_ONLY,
 )
 
@@ -162,9 +164,14 @@ result = runtime.run(
 )
 ```
 
-The official SDK reuses an existing local Codex login. The adapter does not read,
-store, or print credentials. Codex still returns only an untrusted candidate; only
-`result.artifact` has propagation authority after independent verification.
+The official SDK reuses the login in the selected Codex home. The harness does not
+read, copy, store, or print credentials. Both directories must already exist and be
+writable by the SDK process. Authenticate an isolated home separately; do not copy a
+personal `auth.json` into a worktree. Codex documents `CODEX_HOME` as the root for
+config, auth, logs, sessions, and other state, while `CODEX_SQLITE_HOME` relocates
+only SQLite-backed runtime state. A read-only personal home is therefore insufficient.
+Codex still returns only an untrusted candidate; only `result.artifact` has
+propagation authority after independent verification.
 
 The adapter selects Codex's `deny_all` approval mode and disables web search, apps,
 subagents, dependency installation, and workspace network access through SDK config
@@ -181,7 +188,9 @@ After installing the extra, run the complete read-only Codex → quarantine →
 independent verifier → receipt gate example with:
 
 ```bash
-python examples/codex_runtime.py
+python examples/codex_runtime.py \
+  --codex-home work/codex-home \
+  --codex-sqlite-home work/codex-state
 ```
 
 This command makes a real model call using your existing Codex account. Its final

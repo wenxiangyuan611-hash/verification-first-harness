@@ -96,6 +96,11 @@ tools where the SDK exposes reliable overrides, and omits full-access mode. Even
 the provider remains outside the trusted computing base and cannot issue evidence or
 receipts.
 
+The adapter may bind Codex to an explicit writable `codex_home` and a separate
+`sqlite_home`. These are launch-state boundaries, not trust upgrades: authentication
+remains owned by Codex, and neither directory gives model output propagation
+authority. The harness never copies credentials between homes.
+
 `OpenCodeAgentProvider` is the first first-party CLI adapter for a second agent
 runtime. It invokes documented non-interactive JSON mode without a shell, injects a
 named deny-all or read-only agent configuration, requires an explicit working

@@ -24,6 +24,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   Critic may select only controller-owned optional checks, cannot replace baseline
   obligations, and cannot issue evidence or verdicts.
 - A runnable Codex Worker → OpenCode Critic → independent Python Verifier example.
+- Explicit `codex_home` and `sqlite_home` controls for writable, isolated Codex SDK
+  runtime state without copying credentials inside the harness.
 - Adversarial tests for self-review, unauthorized checks, baseline replacement,
   denied critic actions, malformed OpenCode events, and failed challenge selection.
 
@@ -34,6 +36,8 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   beta while retaining the research-prototype warning.
 - `VerificationRuntime.run` now accepts an optional Critic provider and an authorized
   challenge-obligation catalog while preserving the single-provider API.
+- Codex runtime-home and Windows access failures now report an actionable fail-closed
+  diagnostic before claim creation.
 
 ### Planned
 

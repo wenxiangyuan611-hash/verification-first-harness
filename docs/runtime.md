@@ -73,6 +73,8 @@ from verification_harness import CodexAgentProvider, CodexSandbox
 provider = CodexAgentProvider(
     provider_id="codex/worker",
     cwd=Path.cwd(),
+    codex_home=Path("work/codex-home"),
+    sqlite_home=Path("work/codex-state"),
     sandbox=CodexSandbox.READ_ONLY,
 )
 ```
@@ -85,6 +87,15 @@ line. It creates a fresh ephemeral thread for every
 then independently applies the harness's duplicate-key and exact-shape parser to
 `final_response`. Missing responses, SDK errors, extra fields, duplicate keys,
 oversized responses, and malformed runner values fail before claim creation.
+
+`codex_home` and `sqlite_home` map to the official `CODEX_HOME` and
+`CODEX_SQLITE_HOME` process variables through `CodexConfig.env`. Both paths must be
+explicit existing directories. The Codex app-server writes more than SQLite state,
+including temporary launch aliases and logs, so `codex_home` itself must be writable.
+Authenticate an isolated home through Codex outside the harness; the adapter never
+copies `auth.json` or extracts tokens from another profile. See the official
+[Codex environment-variable reference](https://learn.chatgpt.com/docs/config-file/environment-variables)
+and [config/state locations](https://learn.chatgpt.com/docs/config-file/config-advanced#config-and-state-locations).
 
 The runner also selects `ApprovalMode.deny_all` and applies restrictive Codex
 configuration overrides: web search, apps, subagents, skill dependency installation,
@@ -113,7 +124,9 @@ process, and prints payload only from the resulting verified artifact. Running i
 makes a real Codex model call using the caller's existing account:
 
 ```bash
-python examples/codex_runtime.py
+python examples/codex_runtime.py \
+  --codex-home work/codex-home \
+  --codex-sqlite-home work/codex-state
 ```
 
 ## OpenCode CLI provider

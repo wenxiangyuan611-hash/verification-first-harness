@@ -62,6 +62,8 @@ class CodexProviderTests(unittest.TestCase):
         call = runner.calls[0]
         self.assertIs(CodexSandbox.READ_ONLY, call["sandbox"])
         self.assertIsNone(call["cwd"])
+        self.assertIsNone(call["codex_home"])
+        self.assertIsNone(call["sqlite_home"])
         self.assertEqual("gpt-test", call["model"])
         self.assertFalse(call["output_schema"]["additionalProperties"])
         self.assertEqual(
@@ -111,6 +113,26 @@ class CodexProviderTests(unittest.TestCase):
             )
             provider.invoke(self.request())
             self.assertEqual(str(Path(directory).resolve()), runner.calls[-1]["cwd"])
+
+    def test_runtime_directories_are_explicit_existing_paths(self) -> None:
+        runner = RecordingRunner(
+            CodexRunResult(final_response='{"payload_type":"text/plain","payload":"ok"}')
+        )
+        with tempfile.TemporaryDirectory() as directory:
+            provider = CodexAgentProvider(
+                codex_home=directory,
+                sqlite_home=directory,
+                runner=runner,
+            )
+            provider.invoke(self.request())
+            resolved = str(Path(directory).resolve())
+            self.assertEqual(resolved, runner.calls[-1]["codex_home"])
+            self.assertEqual(resolved, runner.calls[-1]["sqlite_home"])
+
+        with self.assertRaisesRegex((FileNotFoundError, OSError), "does-not-exist"):
+            CodexAgentProvider(codex_home="does-not-exist", runner=runner)
+        with self.assertRaisesRegex(TypeError, "Codex SQLite home must be a path"):
+            CodexAgentProvider(sqlite_home=object(), runner=runner)  # type: ignore[arg-type]
 
     def test_provider_fails_closed_on_invalid_sdk_results(self) -> None:
         cases = (
@@ -214,6 +236,8 @@ class CodexProviderTests(unittest.TestCase):
                 cwd="C:\\quarantine",
                 sandbox=CodexSandbox.READ_ONLY,
                 output_schema=schema,
+                codex_home="C:\\codex-home",
+                sqlite_home="C:\\codex-state",
             )
 
         self.assertIsNone(result.error)
@@ -221,6 +245,13 @@ class CodexProviderTests(unittest.TestCase):
         self.assertTrue(records["entered"])
         self.assertTrue(records["exited"])
         overrides = records["config"]["config_overrides"]
+        self.assertEqual(
+            {
+                "CODEX_HOME": "C:\\codex-home",
+                "CODEX_SQLITE_HOME": "C:\\codex-state",
+            },
+            records["config"]["env"],
+        )
         self.assertIn('web_search="disabled"', overrides)
         self.assertIn("apps._default.enabled=false", overrides)
         self.assertIn("agents.enabled=false", overrides)
@@ -254,6 +285,8 @@ class CodexProviderTests(unittest.TestCase):
                 cwd=None,
                 sandbox=CodexSandbox.READ_ONLY,
                 output_schema={},
+                codex_home=None,
+                sqlite_home=None,
             )
 
         with (
@@ -266,8 +299,40 @@ class CodexProviderTests(unittest.TestCase):
                 cwd=None,
                 sandbox=CodexSandbox.READ_ONLY,
                 output_schema={},
+                codex_home=None,
+                sqlite_home=None,
             )
 
+    def test_official_runner_explains_unwritable_runtime_home(self) -> None:
+        class FailingCodex:
+            def __init__(self, config: object) -> None:
+                del config
+
+            def __enter__(self) -> object:
+                raise RuntimeError("failed to initialize sqlite state runtime: os error 5")
+
+            def __exit__(self, *args: object) -> None:
+                del args
+
+        sdk = SimpleNamespace(
+            ApprovalMode=SimpleNamespace(deny_all=object()),
+            Codex=FailingCodex,
+            CodexConfig=lambda **kwargs: kwargs,
+            Sandbox=SimpleNamespace(read_only=object(), workspace_write=object()),
+        )
+        with (
+            patch.object(importlib, "import_module", return_value=sdk),
+            self.assertRaisesRegex(RuntimeError, "writable runtime state"),
+        ):
+            OfficialCodexRunner().run(
+                prompt="request",
+                model=None,
+                cwd=None,
+                sandbox=CodexSandbox.READ_ONLY,
+                output_schema={},
+                codex_home="C:\\isolated-codex",
+                sqlite_home="C:\\isolated-codex",
+            )
 
 if __name__ == "__main__":
     unittest.main()

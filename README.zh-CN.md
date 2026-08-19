@@ -136,6 +136,8 @@ from verification_harness import CodexAgentProvider, CodexSandbox
 codex_worker = CodexAgentProvider(
     provider_id="codex/worker",
     cwd=Path.cwd(),
+    codex_home=Path("work/codex-home"),
+    sqlite_home=Path("work/codex-state"),
     sandbox=CodexSandbox.READ_ONLY,
 )
 
@@ -148,8 +150,12 @@ result = runtime.run(
 )
 ```
 
-官方 SDK 会复用本机已有的 Codex 登录；适配器不会读取、保存或打印凭据。Codex
-返回的仍是不可信候选结果，只有通过独立验证后的 `result.artifact` 才拥有传播权限。
+官方 SDK 会复用所选 Codex Home 中的登录；Harness 不读取、复制、保存或打印凭据。
+两个目录都必须预先存在，并且 SDK 进程必须能够写入。隔离 Home 应单独完成登录，
+不要把个人 `auth.json` 复制进 Worktree。官方定义的 `CODEX_HOME` 同时承载配置、认证、
+日志、Session 等状态，`CODEX_SQLITE_HOME` 只迁移 SQLite 状态，因此只读的个人 Home
+仍不足以启动 App Server。Codex 返回的仍是不可信候选结果，只有通过独立验证后的
+`result.artifact` 才拥有传播权限。
 
 适配器会选择 Codex 的 `deny_all` 审批模式，并通过 SDK 配置覆盖禁用 Web Search、
 App、Sub-Agent、依赖自动安装和 Workspace 网络。当前 Codex 的配置合并机制还不能
@@ -163,7 +169,9 @@ Codex 的 `full_access`。
 安装可选依赖后，可以运行完整的只读 Codex → 隔离区 → 独立验证器 → 收据门控示例：
 
 ```bash
-python examples/codex_runtime.py
+python examples/codex_runtime.py `
+  --codex-home work/codex-home `
+  --codex-sqlite-home work/codex-state
 ```
 
 该命令会使用你已有的 Codex 账号进行一次真实模型调用。最终 JSON 会列出每次尝试的

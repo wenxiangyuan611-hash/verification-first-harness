@@ -49,6 +49,8 @@ class CodexRunner(Protocol):
         cwd: str | None,
         sandbox: CodexSandbox,
         output_schema: dict[str, Any],
+        codex_home: str | None = None,
+        sqlite_home: str | None = None,
     ) -> CodexRunResult: ...
 
 
@@ -58,6 +60,25 @@ def _safe_error(value: object) -> str:
     except BaseException:
         rendered = "unreadable SDK error"
     return rendered[:500] or "unspecified SDK error"
+
+
+def _raise_runtime_home_error(error: Exception) -> None:
+    detail = _safe_error(error)
+    lowered = detail.lower()
+    markers = (
+        "could not find home directory",
+        "failed to initialize sqlite",
+        "failed to initialize state runtime",
+        "os error 5",
+        "access is denied",
+        "permission denied",
+    )
+    if any(marker in lowered for marker in markers):
+        raise RuntimeError(
+            "Codex app-server could not initialize writable runtime state; configure "
+            "an existing writable codex_home (and optionally sqlite_home), authenticate "
+            "that isolated home separately, and retry"
+        ) from error
 
 
 class OfficialCodexRunner:
@@ -71,6 +92,8 @@ class OfficialCodexRunner:
         cwd: str | None,
         sandbox: CodexSandbox,
         output_schema: dict[str, Any],
+        codex_home: str | None = None,
+        sqlite_home: str | None = None,
     ) -> CodexRunResult:
         try:
             sdk = importlib.import_module("openai_codex")
@@ -95,22 +118,34 @@ class OfficialCodexRunner:
         if deny_all is None or sdk_sandbox is None:
             raise RuntimeError("OpenAI Codex SDK does not support the required restrictions")
 
-        config = config_class(config_overrides=_CODEX_CONFIG_OVERRIDES)
-        with codex_class(config) as codex:
-            thread = codex.thread_start(
-                approval_mode=deny_all,
-                model=model,
-                cwd=cwd,
-                sandbox=sdk_sandbox,
-                ephemeral=True,
-            )
-            result = thread.run(
-                prompt,
-                approval_mode=deny_all,
-                cwd=cwd,
-                sandbox=sdk_sandbox,
-                output_schema=output_schema,
-            )
+        sdk_env: dict[str, str] = {}
+        if codex_home is not None:
+            sdk_env["CODEX_HOME"] = codex_home
+        if sqlite_home is not None:
+            sdk_env["CODEX_SQLITE_HOME"] = sqlite_home
+        config = config_class(
+            config_overrides=_CODEX_CONFIG_OVERRIDES,
+            env=sdk_env or None,
+        )
+        try:
+            with codex_class(config) as codex:
+                thread = codex.thread_start(
+                    approval_mode=deny_all,
+                    model=model,
+                    cwd=cwd,
+                    sandbox=sdk_sandbox,
+                    ephemeral=True,
+                )
+                result = thread.run(
+                    prompt,
+                    approval_mode=deny_all,
+                    cwd=cwd,
+                    sandbox=sdk_sandbox,
+                    output_schema=output_schema,
+                )
+        except Exception as error:
+            _raise_runtime_home_error(error)
+            raise
 
         raw_error = getattr(result, "error", None)
         final_response = getattr(result, "final_response", None)
@@ -169,12 +204,25 @@ def _prompt(request: AgentRequest) -> str:
     )
 
 
+def _existing_directory(name: str, value: str | Path | None) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, (str, Path)):
+        raise TypeError(f"{name} must be a path")
+    path = Path(value).resolve(strict=True)
+    if not path.is_dir():
+        raise ValueError(f"{name} must be an existing directory")
+    return str(path)
+
+
 class CodexAgentProvider:
     """Generate an untrusted ``AgentOutput`` through the official Codex Python SDK.
 
     Every invocation uses a fresh ephemeral Codex thread. The default sandbox is
     read-only. ``WORKSPACE_WRITE`` requires an explicit existing directory so a
     caller can point Codex at a disposable or otherwise quarantined workspace.
+    Optional runtime-home paths must already exist and remain owned, writable, and
+    authenticated by the caller; the adapter never creates or populates them.
     """
 
     def __init__(
@@ -184,6 +232,8 @@ class CodexAgentProvider:
         provider_id: str | None = None,
         sandbox: CodexSandbox = CodexSandbox.READ_ONLY,
         cwd: str | Path | None = None,
+        codex_home: str | Path | None = None,
+        sqlite_home: str | Path | None = None,
         max_output_bytes: int = 1_000_000,
         runner: CodexRunner | None = None,
     ) -> None:
@@ -194,14 +244,9 @@ class CodexAgentProvider:
         if max_output_bytes.__class__ is not int or max_output_bytes < 1:
             raise ValueError("Codex max_output_bytes must be positive")
 
-        resolved_cwd: str | None = None
-        if cwd is not None:
-            if not isinstance(cwd, (str, Path)):
-                raise TypeError("Codex cwd must be a path")
-            path = Path(cwd).resolve(strict=True)
-            if not path.is_dir():
-                raise ValueError("Codex cwd must be an existing directory")
-            resolved_cwd = str(path)
+        resolved_cwd = _existing_directory("Codex cwd", cwd)
+        resolved_codex_home = _existing_directory("Codex home", codex_home)
+        resolved_sqlite_home = _existing_directory("Codex SQLite home", sqlite_home)
         if sandbox is CodexSandbox.WORKSPACE_WRITE and resolved_cwd is None:
             raise ValueError("Codex workspace-write sandbox requires an explicit cwd")
 
@@ -217,6 +262,8 @@ class CodexAgentProvider:
         self._model = model
         self._sandbox = sandbox
         self._cwd = resolved_cwd
+        self._codex_home = resolved_codex_home
+        self._sqlite_home = resolved_sqlite_home
         self._max_output_bytes = max_output_bytes
         self._runner = selected_runner
 
@@ -229,6 +276,8 @@ class CodexAgentProvider:
             cwd=self._cwd,
             sandbox=self._sandbox,
             output_schema=_output_schema(),
+            codex_home=self._codex_home,
+            sqlite_home=self._sqlite_home,
         )
         if result.__class__ is not CodexRunResult:
             raise TypeError("Codex runner returned an invalid result")

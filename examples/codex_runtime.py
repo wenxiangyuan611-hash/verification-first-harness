@@ -75,6 +75,14 @@ def main() -> int:
     parser.add_argument("--model", help="Optional Codex model; omit for configured default.")
     parser.add_argument("--cwd", default=".", help="Read-only repository/context directory.")
     parser.add_argument(
+        "--codex-home",
+        help="Optional existing writable Codex home for this provider process.",
+    )
+    parser.add_argument(
+        "--codex-sqlite-home",
+        help="Optional existing directory for Codex SQLite runtime state.",
+    )
+    parser.add_argument(
         "--database",
         default="work/codex-smoke.sqlite3",
         help="SQLite audit database path.",
@@ -122,6 +130,8 @@ def main() -> int:
         provider_id="codex/worker",
         cwd=cwd,
         sandbox=CodexSandbox.READ_ONLY,
+        codex_home=args.codex_home,
+        sqlite_home=args.codex_sqlite_home,
     )
     result = build_runtime(proposal, database).run(
         proposal=proposal,

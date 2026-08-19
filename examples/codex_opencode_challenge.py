@@ -90,6 +90,14 @@ def main() -> int:
         help="Explicit read-only or disposable context directory.",
     )
     parser.add_argument(
+        "--codex-home",
+        help="Optional existing writable Codex home for the worker process.",
+    )
+    parser.add_argument(
+        "--codex-sqlite-home",
+        help="Optional existing directory for Codex SQLite runtime state.",
+    )
+    parser.add_argument(
         "--database",
         default="work/codex-opencode-smoke.sqlite3",
         help="SQLite audit database path.",
@@ -152,6 +160,8 @@ def main() -> int:
         provider_id="codex/worker",
         cwd=cwd,
         sandbox=CodexSandbox.READ_ONLY,
+        codex_home=args.codex_home,
+        sqlite_home=args.codex_sqlite_home,
     )
     critic = OpenCodeAgentProvider(
         model=args.opencode_model,
