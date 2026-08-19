@@ -6,6 +6,15 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Planned
+
+- Pluggable container and microVM execution backends.
+- Parallel worker and critic orchestration.
+- First-party Codex, Claude, and OpenCode provider adapters.
+- Durable append-only audit storage.
+
+## [0.3.0-alpha.1] - 2026-08-19
+
 ### Added
 
 - A provider-neutral `VerificationRuntime` with bounded rejection, repair, and
@@ -26,13 +35,6 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - The development package version is now `0.3.0a1`.
 - The 0.3 roadmap now targets a general agent verification runtime; repository code
   review is one domain pack rather than the project identity.
-
-### Planned
-
-- Pluggable container and microVM execution backends.
-- Parallel worker and critic orchestration.
-- First-party Codex and Claude provider examples.
-- Durable append-only audit storage.
 
 ## [0.2.0] - 2026-08-13
 
