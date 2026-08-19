@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "verification-first-harness"
-version = "0.1.1"
+version = "0.2.0"
 description = "A verification-first control plane that prevents unverified agent claims from propagating."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -23,6 +23,12 @@ classifiers = [
   "Topic :: Software Development :: Quality Assurance",
 ]
 dependencies = []
+
+[project.urls]
+Homepage = "https://github.com/wenxiangyuan611-hash/verification-first-harness"
+Repository = "https://github.com/wenxiangyuan611-hash/verification-first-harness"
+Issues = "https://github.com/wenxiangyuan611-hash/verification-first-harness/issues"
+Changelog = "https://github.com/wenxiangyuan611-hash/verification-first-harness/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
 dev = [

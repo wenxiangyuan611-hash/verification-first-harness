@@ -6,9 +6,20 @@ import json
 from collections.abc import Callable
 from typing import Any
 
+from verification_harness.audit import AuditKind
+from verification_harness.authority import EvidenceAuthority
 from verification_harness.boundary import AgentCallBoundary, ComponentCallError
+from verification_harness.evidence import EvidenceBundle
 from verification_harness.interfaces import Critic, Planner, Verifier, Worker
+from verification_harness.kernel import KernelDecision, VerificationKernel
 from verification_harness.policy import ChallengePolicy, ChallengePolicyError
+from verification_harness.protocol import ClaimEnvelope, RunContext, Verdict
+from verification_harness.python_adapter import (
+    claim_to_envelope,
+    compatibility_kernel,
+    receipt_to_evidence_bundle,
+    spec_to_proposal,
+)
 from verification_harness.schema import (
     Claim,
     ComponentFailure,
@@ -89,6 +100,8 @@ class TrustGateEngine:
         verifier: Verifier,
         max_repairs: int = 2,
         challenge_policy: ChallengePolicy | None = None,
+        kernel: VerificationKernel | None = None,
+        evidence_authority: EvidenceAuthority | None = None,
     ) -> None:
         if max_repairs < 0:
             raise ValueError("max_repairs must be zero or greater")
@@ -97,7 +110,24 @@ class TrustGateEngine:
         self.critic = critic
         self.verifier = verifier
         self.max_repairs = max_repairs
-        self.challenge_policy = challenge_policy or ChallengePolicy()
+        self.challenge_policy = (
+            ChallengePolicy() if challenge_policy is None else challenge_policy
+        )
+        if kernel is None:
+            if evidence_authority is not None:
+                raise ValueError("evidence_authority requires an explicit kernel")
+            self.kernel, self._evidence_authority = compatibility_kernel(planner)
+        else:
+            if evidence_authority is None:
+                raise ValueError(
+                    "an evidence_authority is required with a custom compatibility kernel"
+                )
+            if kernel.evidence_verifier.verifier_id != evidence_authority.verifier_id:
+                raise ValueError(
+                    "custom kernel and evidence_authority must use the same verifier identity"
+                )
+            self.kernel = kernel
+            self._evidence_authority = evidence_authority
         self.state = TaskState.PLANNING
         self.audit_trail: list[dict[str, str]] = []
 
@@ -209,8 +239,21 @@ class TrustGateEngine:
         attempts: int,
         claim: Claim | None = None,
         receipt: VerificationReceipt | None = None,
+        context: RunContext | None = None,
     ) -> dict[str, Any]:
         self.state = TaskState.REJECTED
+        if context is not None:
+            self.kernel.audit_sink.append(
+                context.run_id,
+                AuditKind.RUN_REJECTED,
+                context.digest,
+                {
+                    "attempts": attempts,
+                    "component": failure.component,
+                    "operation": failure.operation,
+                    "error_type": failure.error_type,
+                },
+            )
         self.log_state(
             "[TRUST GATE] Component failure contained; run rejected: "
             f"{failure.component}.{failure.operation} "
@@ -223,10 +266,15 @@ class TrustGateEngine:
             "claim": claim,
             "receipt": receipt,
             "failure": failure,
+            "verdict": Verdict.ERROR.value,
+            "artifact": None,
+            "decision_receipt": None,
+            "context": context,
             "audit_trail": tuple(self.audit_trail),
         }
 
     def run(self, task_id: str) -> dict[str, Any]:
+        context = self.kernel.open_run(task_id)
         self.state = TaskState.PLANNING
         self.audit_trail = []
         self.log_state("Initializing task specification and test requirements...")
@@ -239,14 +287,30 @@ class TrustGateEngine:
                 lambda value: self._validate_spec(value, task_id),
             )
         except ComponentCallError as error:
-            return self._reject_component_failure(error.failure, attempts=0)
+            return self._reject_component_failure(
+                error.failure,
+                attempts=0,
+                context=context,
+            )
         try:
             spec = self._snapshot_spec(proposed_spec)
         except (KeyboardInterrupt, GeneratorExit):
             raise
         except BaseException as error:  # noqa: B036 - normalize planner-owned values.
             failure = AgentCallBoundary.failure("planner", "snapshot_spec", error)
-            return self._reject_component_failure(failure, attempts=0)
+            return self._reject_component_failure(failure, attempts=0, context=context)
+        try:
+            proposed_authorization = spec_to_proposal(
+                context,
+                spec,
+                getattr(self.planner, "agent_id", "planner"),
+            )
+            authorized_spec = self.kernel.authorize(proposed_authorization)
+        except (KeyboardInterrupt, GeneratorExit):
+            raise
+        except BaseException as error:  # noqa: B036 - contain authority boundary failures.
+            failure = AgentCallBoundary.failure("spec_authority", "authorize", error)
+            return self._reject_component_failure(failure, attempts=0, context=context)
 
         attempt = 1
         self.state = TaskState.WORKING
@@ -260,16 +324,27 @@ class TrustGateEngine:
                 lambda value: self._validate_claim(value, attempt),
             )
         except ComponentCallError as error:
-            return self._reject_component_failure(error.failure, attempts=attempt)
+            return self._reject_component_failure(
+                error.failure,
+                attempts=attempt,
+                context=context,
+            )
         try:
             claim = self._snapshot_claim(proposed_claim)
         except (KeyboardInterrupt, GeneratorExit):
             raise
         except BaseException as error:  # noqa: B036 - normalize worker-owned values.
             failure = AgentCallBoundary.failure("worker", "snapshot_claim", error)
-            return self._reject_component_failure(failure, attempts=attempt)
+            return self._reject_component_failure(
+                failure,
+                attempts=attempt,
+                context=context,
+            )
+
+        parent_claim_ids: tuple[str, ...] = ()
 
         for _ in range(self.max_repairs + 1):
+            claim_envelope = claim_to_envelope(context, claim, parent_claim_ids)
             self.state = TaskState.CHALLENGING
             self.log_state(f"Critic performing adversarial challenge on Claim #{attempt}...")
 
@@ -298,15 +373,26 @@ class TrustGateEngine:
                     error.failure,
                     attempts=attempt,
                     claim=claim,
+                    context=context,
                 )
             except ChallengePolicyError as error:
                 failure = AgentCallBoundary.failure("critic", "challenge_policy", error)
-                return self._reject_component_failure(failure, attempts=attempt, claim=claim)
+                return self._reject_component_failure(
+                    failure,
+                    attempts=attempt,
+                    claim=claim,
+                    context=context,
+                )
             except (KeyboardInterrupt, GeneratorExit):
                 raise
             except BaseException as error:  # noqa: B036 - contain malformed critic data.
                 failure = AgentCallBoundary.failure("critic", "challenge_policy", error)
-                return self._reject_component_failure(failure, attempts=attempt, claim=claim)
+                return self._reject_component_failure(
+                    failure,
+                    attempts=attempt,
+                    claim=claim,
+                    context=context,
+                )
 
             self.state = TaskState.VERIFYING
             self.log_state(f"Verifier executing isolated candidate process for Claim #{attempt}...")
@@ -343,6 +429,7 @@ class TrustGateEngine:
                     error.failure,
                     attempts=attempt,
                     claim=claim,
+                    context=context,
                 )
             except (KeyboardInterrupt, GeneratorExit):
                 raise
@@ -353,20 +440,57 @@ class TrustGateEngine:
                     attempts=attempt,
                     claim=claim,
                     receipt=receipt,
+                    context=context,
                 )
 
             if receipt is None:
                 raise RuntimeError("unreachable verifier receipt state")
 
-            if receipt.is_passed:
+            try:
+                evidence_bundle = receipt_to_evidence_bundle(
+                    self._evidence_authority,
+                    context,
+                    authorized_spec,
+                    claim_envelope,
+                    receipt,
+                )
+                kernel_decision = self.kernel.evaluate(
+                    context,
+                    authorized_spec,
+                    claim_envelope,
+                    evidence_bundle,
+                    propagate=False,
+                )
+            except (KeyboardInterrupt, GeneratorExit):
+                raise
+            except BaseException as error:  # noqa: B036 - contain kernel failures.
+                failure = AgentCallBoundary.failure("trust_kernel", "evaluate", error)
+                return self._reject_component_failure(
+                    failure,
+                    attempts=attempt,
+                    claim=claim,
+                    receipt=receipt,
+                    context=context,
+                )
 
+            if receipt.is_passed:
                 def approved_result(
                     approved_claim: Claim,
                     approved_receipt: VerificationReceipt,
                     verified_attempt: int = attempt,
+                    claim_snapshot: ClaimEnvelope = claim_envelope,
+                    evidence_snapshot: EvidenceBundle = evidence_bundle,
+                    decision_snapshot: KernelDecision = kernel_decision,
                 ) -> dict[str, Any]:
                     self.state = TaskState.PASSED
                     self.log_state("[TRUST GATE] Claim verified and approved.")
+                    artifact = self.kernel.trust_gate.propagate(
+                        context,
+                        authorized_spec,
+                        claim_snapshot,
+                        evidence_snapshot,
+                        decision_snapshot.receipt,
+                    )
                     return {
                         "status": "APPROVED",
                         "final_state": self.state.value,
@@ -374,6 +498,10 @@ class TrustGateEngine:
                         "claim": approved_claim,
                         "receipt": approved_receipt,
                         "failure": None,
+                        "verdict": decision_snapshot.verdict,
+                        "artifact": artifact,
+                        "decision_receipt": decision_snapshot.receipt,
+                        "context": context,
                         "audit_trail": tuple(self.audit_trail),
                     }
 
@@ -395,10 +523,32 @@ class TrustGateEngine:
                         attempts=attempt,
                         claim=claim,
                         receipt=receipt,
+                        context=context,
                     )
+
+            self.kernel.audit_sink.append(
+                context.run_id,
+                AuditKind.PROPAGATION_BLOCKED,
+                kernel_decision.receipt.digest,
+                {
+                    "receipt_id": kernel_decision.receipt.receipt_id,
+                    "verdict": kernel_decision.verdict,
+                    "reason": "legacy verification receipt did not pass",
+                },
+            )
 
             if attempt > self.max_repairs:
                 self.state = TaskState.REJECTED
+                self.kernel.audit_sink.append(
+                    context.run_id,
+                    AuditKind.RUN_REJECTED,
+                    kernel_decision.receipt.digest,
+                    {
+                        "attempts": attempt,
+                        "reason": "maximum repairs exceeded",
+                        "verdict": kernel_decision.verdict,
+                    },
+                )
                 self.log_state("[TRUST GATE] Maximum repairs exceeded. Claim rejected.")
                 return {
                     "status": "REJECTED",
@@ -407,10 +557,15 @@ class TrustGateEngine:
                     "claim": claim,
                     "receipt": receipt,
                     "failure": None,
+                    "verdict": Verdict.REJECTED.value,
+                    "artifact": None,
+                    "decision_receipt": kernel_decision.receipt,
+                    "context": context,
                     "audit_trail": tuple(self.audit_trail),
                 }
 
             self.state = TaskState.REPAIRING
+            parent_claim_ids = (claim_envelope.claim_id,)
             attempt += 1
             self.log_state(f"[TRUST GATE] Claim rejected. Starting repair attempt #{attempt}...")
 
@@ -445,6 +600,7 @@ class TrustGateEngine:
                     attempts=attempt,
                     claim=claim,
                     receipt=receipt,
+                    context=context,
                 )
             try:
                 claim = self._snapshot_claim(repaired_claim)
@@ -457,6 +613,7 @@ class TrustGateEngine:
                     attempts=attempt,
                     claim=claim,
                     receipt=receipt,
+                    context=context,
                 )
 
         raise RuntimeError("unreachable repair-loop state")

@@ -23,3 +23,9 @@ can still access resources available to the operating-system account. Execute
 untrusted candidates in a separately managed container, microVM, VM, or OS-level
 sandbox with no ambient credentials and restricted network, filesystem, CPU,
 memory, disk, output, and process access.
+
+The generic trust kernel's Python object boundaries are also not a sandbox against
+hostile modules in the same interpreter. Production deployments should isolate
+agent adapters and verification tools, keep specification, evidence, and receipt
+keys in separate protected controller boundaries, and replace the in-memory replay
+and audit stores with atomic durable services.

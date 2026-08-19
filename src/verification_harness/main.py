@@ -42,9 +42,15 @@ def _run_scenario(title: str, initial_code: str, repaired_code: str, max_repairs
     print(f"\nStatus: {result['status']}")
     print(f"Final state: {result['final_state']}")
     print(f"Attempts: {result['attempts']}")
+    print(f"Kernel verdict: {result['verdict']}")
+    print(f"Verified artifact issued: {result['artifact'] is not None}")
+    decision_receipt = result["decision_receipt"]
+    if decision_receipt is not None:
+        print(f"Decision receipt: {decision_receipt.receipt_id}")
     receipt = result["receipt"]
-    for evidence in receipt.evidence:
-        print(f" - {evidence.obligation_id}: {evidence.status.value} {evidence.error}")
+    if receipt is not None:
+        for evidence in receipt.evidence:
+            print(f" - {evidence.obligation_id}: {evidence.status.value} {evidence.error}")
 
 
 def main() -> None:

@@ -29,13 +29,15 @@ threat model.
 
 ## 0.2.0 — Generic verification kernel
 
-- [ ] Separate `SpecProposal` from `AuthorizedSpec`
-- [ ] General `ClaimEnvelope` for every agent role
-- [ ] Explicit `VERIFIED`, `REJECTED`, `INCONCLUSIVE`, and `ERROR` verdicts
-- [ ] Run context and receipt replay protection
-- [ ] Capability-oriented `VerifiedArtifact` downstream boundary
-- [ ] Stable JSON receipt export and append-only audit event interface
-- [ ] Criteria-to-obligation-to-evidence traceability
+- [x] Separate `SpecProposal` from `AuthorizedSpec`
+- [x] General `ClaimEnvelope` for every agent role
+- [x] Explicit `VERIFIED`, `REJECTED`, `INCONCLUSIVE`, and `ERROR` verdicts
+- [x] Run context and receipt replay protection
+- [x] Capability-oriented `VerifiedArtifact` downstream boundary
+- [x] Stable JSON receipt export and append-only audit event interface
+- [x] Criteria-to-obligation-to-evidence traceability
+- [x] Separate evidence and decision-receipt authorities
+- [x] Compatibility bridge for the sequential Python repair engine
 
 ## 0.3.0 — Repository-level coding harness
 

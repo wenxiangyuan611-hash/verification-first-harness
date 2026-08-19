@@ -9,8 +9,44 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ### Planned
 
 - Pluggable container and microVM execution backends.
-- Signed acceptance-criteria authority.
 - Parallel worker and critic orchestration.
+- Durable replay and append-only audit stores.
+
+## [0.2.0] - 2026-08-13
+
+### Added
+
+- A domain-neutral, versioned trust protocol with fresh `RunContext` values and
+  role-neutral, detached `ClaimEnvelope` values.
+- Independent `SpecProposal` authorization and exact-contract `AuthorizedSpec`
+  signatures.
+- Authenticated `EvidenceBundle` values separated from controller-signed
+  `DecisionReceipt` values.
+- Explicit `VERIFIED`, `REJECTED`, `INCONCLUSIVE`, and `ERROR` verdicts with
+  deterministic precedence and acceptance-criteria traceability.
+- Single-use receipt consumption, cross-run replay checks, capability-oriented
+  `VerifiedArtifact` propagation, and a hash-chained audit sink interface.
+- A compatibility adapter that routes the sequential Python engine through the
+  generic kernel while preserving 0.1.x diagnostic fields.
+- Adversarial tests for unauthorized contract replacement, forged evidence and
+  receipts, incomplete traces, cross-claim/cross-run reuse, repair lineage, and
+  forbidden artifact construction.
+
+### Changed
+
+- All authenticated decisions, including rejected decisions, are validated and
+  signed before repair or termination control flow proceeds.
+- Successful Python engine results expose `context`, `verdict`, `decision_receipt`,
+  and `artifact`; non-successful results never expose a verified artifact.
+- The in-memory replay registry and audit chain serialize mutations for future
+  parallel callers.
+
+### Security
+
+- Acceptance criteria are no longer implicitly trusted merely because a Planner
+  returned them; the compatibility adapter checks exact registry authorization.
+- Evidence and decision authorities use separate keys, limiting the authority of
+  the verification boundary.
 
 ## [0.1.1] - 2026-08-12
 

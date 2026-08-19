@@ -31,6 +31,22 @@ def canonical_json(value: Any) -> str:
     )
 
 
+def strict_json_loads(raw: str) -> Any:
+    """Parse JSON while rejecting duplicate object keys at every nesting level."""
+
+    def unique_object(pairs: list[tuple[Any, Any]]) -> dict[str, Any]:
+        value: dict[str, Any] = {}
+        for key, item in pairs:
+            if key.__class__ is not str:
+                raise ValueError("JSON object keys must be strings")
+            if key in value:
+                raise ValueError(f"duplicate JSON object key: {key}")
+            value[key] = item
+        return value
+
+    return json.loads(raw, object_pairs_hook=unique_object)
+
+
 def digest_value(value: Any) -> str:
     """Return the SHA-256 digest of a canonical protocol value."""
     return hashlib.sha256(canonical_json(value).encode("utf-8")).hexdigest()
