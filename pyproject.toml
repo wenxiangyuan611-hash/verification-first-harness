@@ -1,19 +1,19 @@
 [build-system]
-requires = ["setuptools>=68"]
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "verification-first-harness"
-version = "0.2.0"
+version = "0.3.0a1"
 description = "A verification-first control plane that prevents unverified agent claims from propagating."
 readme = "README.md"
 requires-python = ">=3.10"
-license = { file = "LICENSE" }
+license = "Apache-2.0"
+license-files = ["LICENSE"]
 keywords = ["agents", "multi-agent", "verification", "reliability", "trust-gate"]
 classifiers = [
   "Development Status :: 3 - Alpha",
   "Intended Audience :: Developers",
-  "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
   "Programming Language :: Python :: 3.10",
@@ -41,6 +41,7 @@ dev = [
 
 [project.scripts]
 verification-harness-demo = "verification_harness.main:main"
+verification-harness-runtime = "verification_harness.runtime_cli:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -58,6 +59,7 @@ source = ["verification_harness"]
 omit = [
   "*/demo_task.py",
   "*/main.py",
+  "*/runtime_cli.py",
 ]
 
 [tool.coverage.report]

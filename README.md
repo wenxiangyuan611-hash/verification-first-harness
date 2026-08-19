@@ -3,11 +3,10 @@
 An experimental trust kernel for agent workflows where **every agent output is an
 untrusted claim** and only an independently verified artifact may propagate.
 
-The project optimizes for error containment rather than agent count. Version 0.2.0
-adds a domain-neutral JSON protocol for authorized specifications, role-neutral
-claims, authenticated evidence, deterministic verdicts, signed decision receipts,
-and capability-oriented propagation. The original Python coding loop remains as a
-compatible reference adapter.
+The project optimizes for error containment rather than agent count. The 0.3.0 alpha
+adds a provider-neutral sequential runtime, fail-closed action authorization,
+verifier plugins, and durable SQLite trust labels around the domain-neutral 0.2.0
+protocol. The original Python coding loop remains as a compatible reference adapter.
 
 > Status: **alpha / research prototype**. The protocol and public API may change
 > before 1.0. The built-in Python subprocess runner is not a hostile-code sandbox.
@@ -33,7 +32,10 @@ then can `ArtifactTrustGate` issue a payload-carrying `VerifiedArtifact`.
 flowchart LR
     P["Agent: SpecProposal"] --> A["Independent SpecAuthority"]
     A --> S["AuthorizedSpec"]
-    C["Agent: ClaimEnvelope"] --> Q["Quarantine"]
+    S --> T["AgentProvider request"]
+    T --> AG["ActionGate"]
+    AG --> C["Agent: ClaimEnvelope"]
+    C --> Q["SQLite quarantine"]
     S --> V["Independent verifier"]
     Q --> V
     V --> E["Authenticated EvidenceBundle"]
@@ -45,7 +47,23 @@ flowchart LR
     F --> C
 ```
 
-## What 0.2.0 provides
+## What the 0.3.0 alpha adds
+
+- Provider-neutral `AgentProvider`, `AgentRequest`, and detached `AgentOutput` values.
+- A local `CommandAgentProvider` wire adapter that uses strict JSON over stdin/stdout
+  without shell interpolation.
+- `ActionGate` decisions for agent and verifier invocation, with default-deny
+  allow-list policy and optional independent approval.
+- A `VerifierRegistry` and bounded `CommandVerifierPlugin` for deterministic external
+  checks over canonical claim envelopes.
+- `VerificationRuntime` with bounded rejection, repair, and re-verification control
+  flow; failed attempts expose metadata and receipts but no raw claim payload.
+- `SQLiteRunStore` with explicit `AUTHORIZED`, `QUARANTINED`,
+  `AUTHENTICATED_EVIDENCE`, `DECISION_ONLY`, and `VERIFIED` labels.
+- Durable single-use receipt consumption across controller restarts.
+- A runtime CLI demo and durable-record inspector.
+
+The underlying 0.2.0 trust kernel continues to provide:
 
 - `SpecProposal` separated from independently signed `AuthorizedSpec`.
 - Immutable `ClaimEnvelope` values for Planner, Worker, Critic, Reviewer, Verifier,
@@ -69,6 +87,8 @@ the exact guarantees and assumptions.
 
 A complete minimal generic flow is available in
 [`examples/generic_kernel.py`](examples/generic_kernel.py).
+See the [verification runtime guide](docs/runtime.md) for the provider wire contract,
+trust labels, and alpha security boundary.
 
 ## Quick start
 
@@ -78,6 +98,13 @@ Python 3.10 or newer is required.
 python -m venv .venv
 python -m pip install -e .
 python -m verification_harness.main
+verification-harness-runtime demo
+```
+
+The runtime command prints a `run_id`. Inspect its durable trust labels with:
+
+```bash
+verification-harness-runtime inspect RUN_ID
 ```
 
 For development:
@@ -135,8 +162,12 @@ always return `artifact=None`.
 
 ## Connecting different models and domains
 
-The coding engine depends on structural interfaces, not a model API. A GPT-backed
-Planner, Grok-backed Worker, and Claude-backed Critic may be supplied together.
+The runtime depends on structural interfaces, not a model API. SDK integrations can
+use `CallableAgentProvider`; local Codex, Claude, Grok, or other CLI wrappers can use
+the strict `CommandAgentProvider` wire contract. Applications can build GPT-backed
+Planner, Grok-backed Worker, and Claude-backed Critic adapters over these interfaces,
+but the alpha runtime invokes one provider per run and does not yet schedule them
+together.
 Model diversity can reduce correlated failures, but it never replaces independent
 evidence or grants propagation authority.
 
@@ -161,18 +192,22 @@ verification tools, and candidate programs therefore require process, container,
 microVM, VM, or OS-level isolation with no ambient credentials and explicit
 network, filesystem, CPU, memory, disk, output, and process limits.
 
-The built-in replay registry and audit sink are process-local references, not
-durable distributed security services. Production deployments need transactional
-persistent storage, external key management, and a hardened verifier boundary.
+The alpha SQLite run and receipt stores are durable for one local controller, but
+they are not authenticated distributed security services. The hash-chained audit
+sink remains process-local. Production deployments need transactional distributed
+storage, external key management, and a hardened verifier boundary.
 
 Report security issues according to [SECURITY.md](SECURITY.md).
 
 ## Current limitations
 
-Version 0.2.0 does not yet provide repository-level verifier plugins, a container
-execution backend, durable replay/audit storage, parallel workers, receipt-gated DAG
-scheduling, or non-code domain packs. The Python compatibility adapter maps legacy
-checks to criteria coarsely; domain-specific adapters should define precise traces.
+The 0.3.0 alpha does not yet ship first-party Codex or Claude SDK clients, a container
+execution backend, durable hash-chained audit storage, generic challenge-agent
+scheduling, parallel workers, receipt-gated DAG scheduling, or non-code domain
+packs. Command adapters inherit the caller environment and their output limits are
+post-capture bounds, so they are not hardened hostile-process sandboxes. The Python
+compatibility adapter maps legacy checks to criteria coarsely; domain-specific
+adapters should define precise traces.
 
 These boundaries are tracked in the [roadmap](docs/roadmap.md).
 

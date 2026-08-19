@@ -6,10 +6,13 @@ Verification-First Harness separates generation, verification, decision, and
 propagation. Agents may propose specifications, claims, and challenges, but no
 agent can certify its own output or issue downstream authority.
 
-The architecture has two layers:
+The architecture now has five deliberately decoupled layers:
 
 1. a generic trust kernel for JSON-compatible claims and evidence;
-2. a sequential Python coding adapter retained from 0.1.x.
+2. a provider-neutral sequential agent runtime;
+3. an action-policy plane that mediates consequential execution;
+4. durable local quarantine and replay storage;
+5. domain and provider adapters, including the Python coding loop retained from 0.1.x.
 
 ## Generic trust kernel
 
@@ -61,6 +64,65 @@ Every authorized acceptance criterion must be mapped to at least one obligation.
 Every observation must exactly match its ordered obligation. Unknown or uncovered
 criteria fail closed before a receipt is signed.
 
+## Verification runtime
+
+`VerificationRuntime` is the first executable composition of the generic kernel. It
+opens and persists a run, authorizes the exact specification, invokes one
+`AgentProvider`, converts the detached `AgentOutput` into a quarantined
+`ClaimEnvelope`, collects verifier observations, authenticates evidence, asks the
+kernel for a deterministic decision, and persists the resulting receipt and any
+verified artifact.
+
+Only `REJECTED` decisions enter the bounded repair loop. `INCONCLUSIVE` and `ERROR`
+stop instead of being silently reinterpreted as a repairable correctness failure.
+Repair requests may receive the failed claim and observations inside the untrusted
+work zone. Failed `RuntimeAttempt` results expose claim identity and decision
+metadata, but not the raw failed payload. Only a successful `VerifiedArtifact`
+crosses into the trusted downstream zone.
+
+`CallableAgentProvider` adapts SDK clients without granting them verification
+authority. `CommandAgentProvider` is a local strict-JSON wire adapter: it sends a
+canonical request on stdin, expects exactly `payload_type` and `payload` on stdout,
+and never interpolates model output into a shell command.
+
+## Action policy plane
+
+Action authorization and claim verification answer different questions:
+
+- `ActionGate`: may this exact agent or verifier operation execute?
+- `ArtifactTrustGate`: may this exact claim payload propagate downstream?
+
+`ActionGate` evaluates `ActionRequest` values before calling the operation. The
+reference allow-list policy denies unknown kinds, and `REQUIRE_APPROVAL` fails closed
+when no resolver returns an actual boolean approval. Policy errors and malformed
+decisions never execute the proposed operation.
+
+This gate does not prove that an allowed operation succeeded or that its output is
+correct. Its output must still enter the claim and evidence pipeline.
+
+## Verifier plugins
+
+`VerifierRegistry` routes each obligation kind to exactly one `VerifierPlugin`.
+Unsupported kinds, plugin exceptions, malformed observations, identity mismatches,
+and denied verifier actions become explicit `ERROR` observations. A plugin never
+computes the final verdict.
+
+The alpha `CommandVerifierPlugin` executes an authorized argv list without a shell
+and sends the canonical claim envelope on stdin. It is suitable for local
+deterministic tools, but it is not a container or hostile-code sandbox.
+
+## Durable local trust labels
+
+`SQLiteRunStore` persists the context and each protocol value under one explicit
+label: `AUTHORIZED`, `QUARANTINED`, `AUTHENTICATED_EVIDENCE`, `DECISION_ONLY`, or
+`VERIFIED`. Persistence never upgrades a label. Stored payload digests are checked
+when records are read.
+
+`SQLiteReceiptUseStore` uses an immediate transaction and a unique receipt ID to
+preserve single-use propagation across process restarts. SQLite file integrity is
+not cryptographic authentication; a production controller still needs protected,
+transactional storage and external audit guarantees.
+
 ## Authorities and keys
 
 The reference implementation provides separate HMAC-SHA-256 authorities:
@@ -110,8 +172,10 @@ trusted computing base includes:
 2. the independent evidence collector and evidence-authentication boundary;
 3. deterministic decision policy and receipt authority;
 4. `ArtifactTrustGate` plus replay storage;
-5. the execution, retrieval, or measurement isolation platform;
-6. the process runtime itself for in-process deployments.
+5. action policy, approval resolution, and complete mediation of controlled effects;
+6. transactional receipt-use storage and the execution, retrieval, or measurement
+   isolation platform;
+7. the process runtime itself for in-process deployments.
 
 Agents and model providers remain outside this trusted base. A verifier is not an
 LLM role here; it is an evidence-producing security boundary whose implementation
@@ -119,7 +183,8 @@ and tools must be reviewed independently.
 
 ## Remaining architectural boundary
 
-The kernel is domain-neutral, but orchestration is still sequential and the only
-built-in domain adapter verifies small Python function claims. Repository-level
-plugins, container isolation, parallel branches, receipt-gated DAG scheduling, and
+The kernel and runtime are domain-neutral, but orchestration is still sequential.
+The alpha provides a generic command verifier rather than first-party Codex, Claude,
+or repository adapters. Container isolation, a generic challenge scheduler,
+durable hash-chained audit, parallel branches, receipt-gated DAG scheduling, and
 non-code verifier packs remain roadmap work.

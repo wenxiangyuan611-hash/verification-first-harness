@@ -3,9 +3,9 @@
 一个面向 Agent 工作流的实验性信任内核：**所有 Agent 输出默认都是不可信 Claim，
 只有经过独立验证的 Artifact 才能向下游传播。**
 
-项目优化的目标是错误隔离，而不是 Agent 数量。0.2.0 增加了与具体领域无关的 JSON
-协议，用于授权规格、通用 Claim、认证证据、确定性判定、签名决策收据和能力式传播。
-原有 Python 编码闭环作为兼容的参考适配器继续保留。
+项目优化的目标是错误隔离，而不是 Agent 数量。0.3.0 Alpha 在 0.2.0 通用信任协议之上
+增加了与厂商无关的串行 Runtime、失败关闭的动作授权、验证器插件和带信任标签的 SQLite
+持久化。原有 Python 编码闭环作为兼容的参考适配器继续保留。
 
 > 当前状态：Alpha / 研究原型。1.0 前协议和公共 API 可能调整。内置 Python
 > 子进程执行器不是恶意代码安全沙箱。
@@ -30,7 +30,10 @@
 flowchart LR
     P["Agent：SpecProposal"] --> A["独立 SpecAuthority"]
     A --> S["AuthorizedSpec"]
-    C["Agent：ClaimEnvelope"] --> Q["隔离区"]
+    S --> T["AgentProvider 请求"]
+    T --> AG["ActionGate"]
+    AG --> C["Agent：ClaimEnvelope"]
+    C --> Q["SQLite 隔离区"]
     S --> V["独立验证器"]
     Q --> V
     V --> E["认证 EvidenceBundle"]
@@ -42,7 +45,19 @@ flowchart LR
     F --> C
 ```
 
-## 0.2.0 已实现能力
+## 0.3.0 Alpha 新增能力
+
+- 与厂商无关的 `AgentProvider`、`AgentRequest` 和分离式 `AgentOutput`；
+- 使用 stdin/stdout 严格 JSON、禁止 Shell 插值的 `CommandAgentProvider`；
+- 在 Agent 和 Verifier 执行前运行的 `ActionGate`，默认拒绝未列入允许表的动作；
+- `VerifierRegistry` 和有超时、输出限制的 `CommandVerifierPlugin`；
+- 有界的拒绝、修复和重新验证 `VerificationRuntime`；
+- SQLite 中明确区分 `AUTHORIZED`、`QUARANTINED`、`AUTHENTICATED_EVIDENCE`、
+  `DECISION_ONLY` 和 `VERIFIED`；
+- 控制器重启后仍然有效的一次性收据消费；
+- Runtime 演示和持久化记录检查 CLI。
+
+底层 0.2.0 信任内核继续提供：
 
 - 将不可信 `SpecProposal` 与独立签名的 `AuthorizedSpec` 分开；
 - Planner、Worker、Critic、Reviewer、Verifier、Master 和 Sub-Agent 共用不可变
@@ -62,6 +77,8 @@ flowchart LR
 
 可直接运行的通用内核最小示例位于
 [`examples/generic_kernel.py`](examples/generic_kernel.py)。
+Provider 线协议、信任标签和 Alpha 安全边界请查看
+[Verification Runtime 指南](docs/runtime.md)。
 
 ## 快速开始
 
@@ -71,6 +88,13 @@ flowchart LR
 python -m venv .venv
 python -m pip install -e .
 python -m verification_harness.main
+verification-harness-runtime demo
+```
+
+演示会输出 `run_id`，可检查该运行的持久化信任标签：
+
+```bash
+verification-harness-runtime inspect RUN_ID
 ```
 
 开发检查：
@@ -127,9 +151,11 @@ assert result["artifact"] is not None
 
 ## 不同模型与不同领域
 
-编码引擎依赖结构化接口，而不是某一家模型 API。可以同时接入 GPT Planner、Grok
-Worker 和 Claude Critic。多模型可以降低相关错误，但不能替代独立证据，也不能授予
-传播权限。
+Runtime 依赖结构化接口，而不是某一家模型 API。SDK 可以通过 `CallableAgentProvider`
+接入；本地 Codex、Claude、Grok 或其他 CLI 可以使用严格的 `CommandAgentProvider`
+协议。应用可以在这些接口上封装 GPT Planner、Grok Worker 和 Claude Critic，但当前
+Alpha 运行时每次运行只调用一个 Provider，尚未把它们调度到同一工作流。多模型可以降低相关
+错误，但不能替代独立证据，也不能授予传播权限。
 
 通用 `VerificationKernel` 不局限于 Python 源码。它使用独立的 JSON 负载，因此适配器
 可以表示计划、研究结论、数学答案、文档、代码补丁或其他领域。但每个领域都必须提供：
@@ -148,15 +174,17 @@ Worker 和 Claude Critic。多模型可以降低相关错误，但不能替代�
 验证工具和候选程序需要进程、容器、microVM、虚拟机或操作系统级隔离，并限制凭据、
 网络、文件系统、CPU、内存、磁盘、输出量和进程数。
 
-内置重放注册表和审计存储只是单进程参考实现，不是持久化分布式安全服务。生产部署
-需要事务型持久存储、外部密钥管理和加固后的验证器边界。
+Alpha 版 SQLite 运行和收据存储可以跨本地控制器重启持久化，但不是经过认证的分布式
+安全服务；哈希链审计存储仍是单进程实现。生产部署需要事务型分布式存储、外部密钥
+管理和加固后的验证器边界。
 
 安全问题请按照[安全政策](SECURITY.md)报告。
 
 ## 当前限制
 
-0.2.0 尚未提供仓库级验证插件、容器执行后端、持久化重放/审计存储、多 Worker 并行、
-收据门控 DAG 调度或非代码领域包。Python 兼容适配器目前把旧检查较粗粒度地映射到
-验收标准；新的领域适配器应建立更精确的追踪关系。
+0.3.0 Alpha 尚未内置 Codex/Claude SDK 客户端、容器执行后端、持久化哈希链审计、
+通用 Critic 调度、多 Worker 并行、收据门控 DAG 或非代码领域包。命令适配器会继承
+调用者环境，输出限制也在捕获后检查，因此不是恶意进程安全沙箱。Python 兼容适配器
+目前把旧检查较粗粒度地映射到验收标准；新领域适配器应建立更精确的追踪关系。
 
 后续工作请查看[路线图](docs/roadmap.md)。项目使用 Apache-2.0 许可证。

@@ -39,14 +39,29 @@ threat model.
 - [x] Separate evidence and decision-receipt authorities
 - [x] Compatibility bridge for the sequential Python repair engine
 
-## 0.3.0 — Repository-level coding harness
+## 0.3.0-alpha.1 — Provider-neutral verification runtime
 
-- [ ] Source-tree, Git patch, and build-artifact claims
-- [ ] Verifier plugin registry
-- [ ] Pytest, compiler, type-checker, linter, and schema-verifier adapters
-- [ ] Execution backend interface
-- [ ] Container backend with default-deny network and resource quotas
-- [ ] CLI commands for run, verify, inspect, and replay
+- [x] Provider-neutral agent request and output protocol
+- [x] Callable SDK adapter and strict-JSON local command adapter
+- [x] Pre-execution `ActionGate` with deny, allow, and approval-required verdicts
+- [x] Verifier plugin registry with contained error observations
+- [x] Generic external-command verifier with no shell interpolation
+- [x] Bounded rejection, repair, and re-verification runtime
+- [x] SQLite run, claim, evidence, receipt, artifact, and replay persistence
+- [x] Explicit durable trust labels that never promote quarantined claims
+- [x] CLI runtime demo and durable-record inspection
+- [x] End-to-end subprocess and restart replay tests
+
+## 0.3.0-beta — Real agent and coding-domain pilot
+
+- [ ] First-party Codex and Claude provider examples with pinned wire contracts
+- [ ] Repository, source-tree, Git patch, and build-artifact claim types
+- [ ] Pytest, compiler, type-checker, linter, schema, and browser verifier packs
+- [ ] Generic critic/challenge scheduling before verification
+- [ ] Container execution backend with default-deny network and resource quotas
+- [ ] Durable hash-chained audit sink and action-decision records
+- [ ] CLI commands for configured run, verify, resume, inspect, and replay
+- [ ] Public fixtures and false-propagation test corpus
 
 ## 0.4.0 — Controlled parallel multi-agent workflows
 
@@ -54,6 +69,7 @@ threat model.
 - [ ] Per-branch timeout, budget, cancellation, and isolation
 - [ ] Model/provider provenance on every claim
 - [ ] Receipt-gated DAG execution
+- [ ] Trusted edges accept only `VerifiedArtifact`; challenge edges remain quarantined
 - [ ] Selection only among independently verified candidates
 - [ ] Correlated-failure measurements without majority-vote authorization
 

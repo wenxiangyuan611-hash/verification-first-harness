@@ -7,7 +7,7 @@ import json
 import keyword
 from dataclasses import asdict, dataclass, field, is_dataclass
 from enum import Enum
-from typing import Any
+from typing import Any, ClassVar
 
 
 def _json_default(value: Any) -> Any:
@@ -85,6 +85,8 @@ class ComponentFailure:
 
 @dataclass(frozen=True)
 class TestCase:
+    __test__: ClassVar[bool] = False
+
     id: str
     input: Any
     expected: Any
