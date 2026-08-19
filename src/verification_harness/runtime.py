@@ -7,6 +7,12 @@ from typing import Any
 
 from verification_harness.actions import ActionGate, ActionRequest
 from verification_harness.authority import EvidenceAuthority
+from verification_harness.challenges import (
+    ChallengeSchedule,
+    ChallengeScheduler,
+    ChallengeSelection,
+    RuntimeChallengePolicy,
+)
 from verification_harness.decision import Observation, VerificationObligation
 from verification_harness.evidence import EvidenceBundle
 from verification_harness.gate import VerifiedArtifact
@@ -34,6 +40,15 @@ def _safe_error(error: BaseException) -> str:
 
 
 @dataclass(frozen=True)
+class RuntimeChallenge:
+    """Public metadata for a quarantined critic claim; no rationale propagates."""
+
+    claim_id: str
+    claim_digest: str
+    selected_obligation_ids: tuple[str, ...]
+
+
+@dataclass(frozen=True)
 class RuntimeAttempt:
     """Attempt metadata; failed attempts intentionally expose no claim payload."""
 
@@ -43,6 +58,7 @@ class RuntimeAttempt:
     verdict: str
     receipt: DecisionReceipt
     artifact: VerifiedArtifact | None
+    challenge: RuntimeChallenge | None = None
 
 
 @dataclass(frozen=True)
@@ -104,6 +120,9 @@ class VerificationRuntime:
         obligations: tuple[VerificationObligation, ...],
         role: AgentRole = AgentRole.WORKER,
         max_repairs: int = 0,
+        critic_provider: AgentProvider | None = None,
+        challenge_obligations: tuple[VerificationObligation, ...] = (),
+        challenge_policy: RuntimeChallengePolicy | None = None,
     ) -> RuntimeResult:
         if proposal.__class__ is not SpecProposal:
             raise TypeError("verification runtime requires SpecProposal")
@@ -120,6 +139,51 @@ class VerificationRuntime:
             raise TypeError("verification runtime role must be AgentRole")
         if max_repairs.__class__ is not int or max_repairs < 0:
             raise ValueError("max_repairs must be a non-negative integer")
+        if challenge_obligations.__class__ is not tuple:
+            raise TypeError("challenge_obligations must be a tuple")
+        if any(
+            item.__class__ is not VerificationObligation for item in challenge_obligations
+        ):
+            raise TypeError("challenge_obligations contain an invalid value")
+        selected_challenge_policy = (
+            RuntimeChallengePolicy() if challenge_policy is None else challenge_policy
+        )
+        if selected_challenge_policy.__class__ is not RuntimeChallengePolicy:
+            raise TypeError("challenge_policy must be RuntimeChallengePolicy")
+        challenge_scheduler: ChallengeScheduler | None = None
+        if critic_provider is None:
+            if challenge_obligations:
+                raise ValueError("challenge obligations require a critic provider")
+        else:
+            if role is not AgentRole.WORKER:
+                raise ValueError("challenged workflows require the WORKER role")
+            if not challenge_obligations:
+                raise ValueError("critic provider requires non-empty challenge obligations")
+            critic_provider_id = critic_provider.provider_id
+            if critic_provider_id.__class__ is not str or not critic_provider_id.strip():
+                raise ValueError("critic provider_id must be a non-empty string")
+            if not callable(critic_provider.invoke):
+                raise TypeError("critic provider must provide invoke")
+            if (
+                selected_challenge_policy.require_distinct_provider
+                and critic_provider_id == provider_id
+            ):
+                raise ValueError("worker and critic providers must be distinct")
+            selected_challenge_policy.authorize(
+                worker_provider_id=provider_id,
+                critic_provider_id=critic_provider_id,
+                baseline=obligations,
+                catalog=challenge_obligations,
+                selection=ChallengeSelection(
+                    selected_obligation_ids=(),
+                    rationale={"preflight": True},
+                ),
+            )
+            challenge_scheduler = ChallengeScheduler(
+                action_gate=self._action_gate,
+                run_store=self._run_store,
+                policy=selected_challenge_policy,
+            )
 
         context = self._kernel.open_run(proposal.task_id)
         self._run_store.save_context(context)
@@ -178,20 +242,45 @@ class VerificationRuntime:
                 attempt=attempt_number,
             )
             self._run_store.quarantine_claim(claim)
+            verification_obligations = obligations
+            runtime_challenge: RuntimeChallenge | None = None
+            if challenge_scheduler is not None:
+                if critic_provider is None:
+                    raise AssertionError("challenge scheduler lost its critic provider")
+                schedule: ChallengeSchedule = challenge_scheduler.schedule(
+                    context=context,
+                    spec=spec,
+                    worker_claim=claim,
+                    worker_provider_id=provider_id,
+                    critic_provider=critic_provider,
+                    attempt=attempt_number,
+                    baseline=obligations,
+                    catalog=challenge_obligations,
+                )
+                verification_obligations = schedule.obligations
+                runtime_challenge = RuntimeChallenge(
+                    claim_id=schedule.claim_id,
+                    claim_digest=schedule.claim_digest,
+                    selected_obligation_ids=schedule.selected_obligation_ids,
+                )
             observations = self._verifier_registry.collect(
                 context,
                 spec,
                 claim,
-                obligations,
+                verification_obligations,
             )
             evidence = self._evidence_authority.issue(
                 context,
                 spec,
                 claim,
-                obligations,
+                verification_obligations,
                 observations,
             )
-            self._validate_evidence_plan(evidence, obligations, observations)
+            self._validate_evidence_plan(
+                evidence,
+                verification_obligations,
+                observations,
+            )
             self._run_store.save_evidence(evidence)
             decision = self._kernel.evaluate(context, spec, claim, evidence)
             self._run_store.save_receipt(decision.receipt)
@@ -204,6 +293,7 @@ class VerificationRuntime:
                 verdict=decision.verdict,
                 receipt=decision.receipt,
                 artifact=decision.artifact,
+                challenge=runtime_challenge,
             )
             attempts.append(attempt)
             if decision.artifact is not None or decision.verdict != Verdict.REJECTED.value:

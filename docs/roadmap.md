@@ -61,12 +61,21 @@ threat model.
 - [x] Deterministic fake-SDK tests that require no model account or usage
 - [x] Runnable read-only Codex-to-independent-verifier example
 
+## 0.3.0-beta.2 — OpenCode critic and bounded challenge scheduling
+
+- [x] First-party OpenCode CLI provider over documented JSON event output
+- [x] Deny-all default and explicit read-only OpenCode permission profile
+- [x] Strict local event and final `AgentOutput` parsing
+- [x] Optional Worker-to-Critic scheduling before independent verification
+- [x] Controller-owned challenge catalog that critics may select but never replace
+- [x] Distinct Worker/Critic provider identity by default
+- [x] Codex Worker, OpenCode Critic, deterministic Verifier live example
+- [x] Fake-CLI and adversarial challenge tests requiring no model account or usage
+
 ## 0.3.0-beta — Remaining real-agent and coding-domain pilot
 
-- [ ] First-party Claude provider example with a versioned output contract
 - [ ] Repository, source-tree, Git patch, and build-artifact claim types
 - [ ] Pytest, compiler, type-checker, linter, schema, and browser verifier packs
-- [ ] Generic critic/challenge scheduling before verification
 - [ ] Container execution backend with default-deny network and resource quotas
 - [ ] Durable hash-chained audit sink and action-decision records
 - [ ] CLI commands for configured run, verify, resume, inspect, and replay

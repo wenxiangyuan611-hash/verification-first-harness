@@ -21,6 +21,15 @@ from verification_harness.authority import (
     ReceiptAuthority,
     SpecAuthority,
 )
+from verification_harness.challenges import (
+    CHALLENGE_PAYLOAD_TYPE,
+    ChallengeInvocationError,
+    ChallengeSchedule,
+    ChallengeScheduler,
+    ChallengeSelection,
+    RuntimeChallengePolicy,
+    RuntimeChallengePolicyError,
+)
 from verification_harness.codex_provider import (
     CodexAgentProvider,
     CodexRunner,
@@ -45,6 +54,13 @@ from verification_harness.gate import (
 )
 from verification_harness.gate import TrustGate as ArtifactTrustGate
 from verification_harness.kernel import KernelDecision, VerificationKernel
+from verification_harness.opencode_provider import (
+    OfficialOpenCodeRunner,
+    OpenCodeAgentProvider,
+    OpenCodePermissionProfile,
+    OpenCodeRunner,
+    OpenCodeRunResult,
+)
 from verification_harness.persistence import (
     RunRecordKind,
     SQLiteReceiptUseStore,
@@ -76,6 +92,7 @@ from verification_harness.receipts import DecisionReceipt
 from verification_harness.runtime import (
     AgentInvocationError,
     RuntimeAttempt,
+    RuntimeChallenge,
     RuntimeResult,
     VerificationRuntime,
 )
@@ -96,7 +113,7 @@ from verification_harness.verifiers import (
     VerifierRegistry,
 )
 
-__version__ = "0.3.0b1"
+__version__ = "0.3.0b2"
 
 __all__ = [
     "PROTOCOL_VERSION",
@@ -119,8 +136,13 @@ __all__ = [
     "AuditKind",
     "AuditSink",
     "AuthorizedSpec",
+    "CHALLENGE_PAYLOAD_TYPE",
+    "ChallengeInvocationError",
     "ChallengePolicy",
     "ChallengePolicyError",
+    "ChallengeSchedule",
+    "ChallengeScheduler",
+    "ChallengeSelection",
     "Claim",
     "ClaimEnvelope",
     "CodexAgentProvider",
@@ -149,12 +171,20 @@ __all__ = [
     "Obligation",
     "Observation",
     "OfficialCodexRunner",
+    "OfficialOpenCodeRunner",
+    "OpenCodeAgentProvider",
+    "OpenCodePermissionProfile",
+    "OpenCodeRunResult",
+    "OpenCodeRunner",
     "ReceiptAuthority",
     "ReceiptUseStore",
     "ReplayError",
     "RunRecordKind",
     "RunContext",
     "RuntimeAttempt",
+    "RuntimeChallenge",
+    "RuntimeChallengePolicy",
+    "RuntimeChallengePolicyError",
     "RuntimeResult",
     "SQLiteReceiptUseStore",
     "SQLiteRunStore",

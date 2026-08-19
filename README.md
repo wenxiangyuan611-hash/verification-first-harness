@@ -4,10 +4,10 @@ An experimental trust kernel for agent workflows where **every agent output is a
 untrusted claim** and only an independently verified artifact may propagate.
 
 The project optimizes for error containment rather than agent count. The 0.3.0 beta
-adds a provider-neutral sequential runtime, a first-party Codex SDK provider,
-fail-closed action authorization, verifier plugins, and durable SQLite trust labels
-around the domain-neutral 0.2.0 protocol. The original Python coding loop remains as
-a compatible reference adapter.
+adds a provider-neutral sequential runtime, first-party Codex and OpenCode providers,
+bounded Worker-to-Critic scheduling, fail-closed action authorization, verifier
+plugins, and durable SQLite trust labels around the domain-neutral 0.2.0 protocol.
+The original Python coding loop remains as a compatible reference adapter.
 
 > Status: **beta / research prototype**. The protocol and public API may change
 > before 1.0. The built-in Python subprocess runner is not a hostile-code sandbox.
@@ -37,6 +37,9 @@ flowchart LR
     T --> AG["ActionGate"]
     AG --> C["Agent: ClaimEnvelope"]
     C --> Q["SQLite quarantine"]
+    Q -.-> K["Optional untrusted Critic"]
+    K --> B["Bounded check selection"]
+    B --> V
     S --> V["Independent verifier"]
     Q --> V
     V --> E["Authenticated EvidenceBundle"]
@@ -57,6 +60,12 @@ flowchart LR
   [official Python SDK](https://developers.openai.com/codex/sdk), with a fresh
   ephemeral thread per request, structured output, a read-only default sandbox, and
   restrictive approval/tool configuration.
+- `OpenCodeAgentProvider` over documented non-interactive CLI JSON events, with an
+  explicit working directory, deny-all default, optional read-only permissions, and
+  strict local re-parsing.
+- An optional distinct Critic stage. The Critic may select only controller-owned
+  checks; it cannot remove baseline obligations, create verifier commands, issue
+  evidence, or decide the verdict.
 - `ActionGate` decisions for agent and verifier invocation, with default-deny
   allow-list policy and optional independent approval.
 - A `VerifierRegistry` and bounded `CommandVerifierPlugin` for deterministic external
@@ -93,7 +102,8 @@ the exact guarantees and assumptions.
 A complete minimal generic flow is available in
 [`examples/generic_kernel.py`](examples/generic_kernel.py).
 See the [verification runtime guide](docs/runtime.md) for the provider wire contract,
-direct Codex setup, trust labels, and beta security boundary.
+Codex/OpenCode setup, bounded challenge flow, trust labels, and beta security
+boundary.
 
 ## Quick start
 
@@ -177,6 +187,38 @@ python examples/codex_runtime.py
 This command makes a real model call using your existing Codex account. Its final
 JSON reports every attempt verdict and exposes a payload only under `artifact`.
 
+## OpenCode critic provider
+
+After installing and authenticating the OpenCode CLI, it can act as either Worker or
+Critic. The bounded cross-provider flow is:
+
+```python
+from pathlib import Path
+
+from verification_harness import OpenCodeAgentProvider, OpenCodePermissionProfile
+
+opencode_critic = OpenCodeAgentProvider(
+    provider_id="opencode/critic",
+    cwd=Path.cwd(),
+    profile=OpenCodePermissionProfile.DENY_ALL,
+)
+
+result = runtime.run(
+    proposal=proposal,
+    provider=codex_worker,
+    critic_provider=opencode_critic,
+    input_payload=task_input,
+    obligations=mandatory_obligations,
+    challenge_obligations=optional_controller_owned_checks,
+    max_repairs=1,
+)
+```
+
+Run `python examples/codex_opencode_challenge.py` for the complete Codex Worker →
+OpenCode Critic → independent Python Verifier example. It uses existing model
+authentication and may consume both services' usage. OpenCode permissions are
+defense in depth; the local CLI is not an OS sandbox.
+
 ## Python coding-loop example
 
 ```python
@@ -222,13 +264,12 @@ always return `artifact=None`.
 
 ## Connecting different models and domains
 
-The runtime depends on structural interfaces, not a model API. Codex can use the
-first-party `CodexAgentProvider`; other SDK integrations can use
-`CallableAgentProvider`; local Claude, Grok, OpenCode, or other CLI wrappers can use
-the strict `CommandAgentProvider` wire contract. Applications can build GPT-backed
-Planner, Grok-backed Worker, and Claude-backed Critic adapters over these interfaces,
-but the beta runtime invokes one provider per run and does not yet schedule them
-together.
+The runtime depends on structural interfaces, not a model API. Codex uses the
+first-party SDK adapter, OpenCode uses the first-party CLI adapter, other SDKs can use
+`CallableAgentProvider`, and other local tools can use the strict
+`CommandAgentProvider` wire contract. The beta runtime can schedule one Worker and
+one optional distinct Critic sequentially. It does not yet run parallel branches or
+a receipt-gated DAG.
 Model diversity can reduce correlated failures, but it never replaces independent
 evidence or grants propagation authority.
 
@@ -262,14 +303,14 @@ Report security issues according to [SECURITY.md](SECURITY.md).
 
 ## Current limitations
 
-The 0.3.0 beta does not yet ship a first-party Claude SDK client, a container
-execution backend, durable hash-chained audit storage, generic challenge-agent
-scheduling, parallel workers, receipt-gated DAG scheduling, or non-code domain
-packs. The Codex SDK call currently relies on the SDK for cancellation, and its
-workspace-write mode is not a container boundary. Command adapters inherit the
-caller environment and their output limits are post-capture bounds, so they are not
-hardened hostile-process sandboxes. The Python compatibility adapter maps legacy
-checks to criteria coarsely; domain-specific adapters should define precise traces.
+The 0.3.0 beta does not yet ship a container execution backend, durable hash-chained
+audit storage, repository/patch claim types, verifier packs, parallel workers,
+receipt-gated DAG scheduling, or non-code domain packs. The Codex SDK call relies on
+the SDK for cancellation, and OpenCode/Codex application-level permissions are not
+container boundaries. Command adapters may inherit the caller environment and their
+output limits are post-capture bounds, so they are not hardened hostile-process
+sandboxes. The Python compatibility adapter maps legacy checks to criteria coarsely;
+domain-specific adapters should define precise traces.
 
 These boundaries are tracked in the [roadmap](docs/roadmap.md).
 

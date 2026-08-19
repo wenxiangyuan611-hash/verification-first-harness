@@ -4,9 +4,9 @@
 只有经过独立验证的 Artifact 才能向下游传播。**
 
 项目优化的目标是错误隔离，而不是 Agent 数量。0.3.0 Beta 在 0.2.0 通用信任协议之上
-增加了与厂商无关的串行 Runtime、第一方 Codex SDK Provider、失败关闭的动作授权、
-验证器插件和带信任标签的 SQLite 持久化。原有 Python 编码闭环作为兼容的参考适配器
-继续保留。
+增加了与厂商无关的串行 Runtime、第一方 Codex/OpenCode Provider、有边界的
+Worker-to-Critic 调度、失败关闭的动作授权、验证器插件和带信任标签的 SQLite
+持久化。原有 Python 编码闭环作为兼容的参考适配器继续保留。
 
 > 当前状态：Beta / 研究原型。1.0 前协议和公共 API 可能调整。内置 Python
 > 子进程执行器不是恶意代码安全沙箱。
@@ -35,6 +35,9 @@ flowchart LR
     T --> AG["ActionGate"]
     AG --> C["Agent：ClaimEnvelope"]
     C --> Q["SQLite 隔离区"]
+    Q -.-> K["可选的不可信 Critic"]
+    K --> B["有边界的检查选择"]
+    B --> V
     S --> V["独立验证器"]
     Q --> V
     V --> E["认证 EvidenceBundle"]
@@ -53,6 +56,10 @@ flowchart LR
 - 基于 OpenAI [官方 Python SDK](https://developers.openai.com/codex/sdk) 的可选
   `CodexAgentProvider`，每次请求使用新的临时 Thread、结构化输出、默认只读沙箱和
   限权后的审批/工具配置；
+- 基于 OpenCode 非交互 CLI JSON 事件的 `OpenCodeAgentProvider`，要求显式工作目录，
+  默认拒绝全部工具，可选只读权限，并对事件和最终输出进行本地严格解析；
+- 可选的独立 Critic 阶段：Critic 只能选择控制器预先授权的检查，不能删除基线义务、
+  创建验证命令、签发证据或决定 Verdict；
 - 在 Agent 和 Verifier 执行前运行的 `ActionGate`，默认拒绝未列入允许表的动作；
 - `VerifierRegistry` 和有超时、输出限制的 `CommandVerifierPlugin`；
 - 有界的拒绝、修复和重新验证 `VerificationRuntime`；
@@ -81,7 +88,7 @@ flowchart LR
 
 可直接运行的通用内核最小示例位于
 [`examples/generic_kernel.py`](examples/generic_kernel.py)。
-Provider 线协议、Codex 直接接入、信任标签和 Beta 安全边界请查看
+Provider 线协议、Codex/OpenCode 接入、有边界 Challenge、信任标签和 Beta 安全边界请查看
 [Verification Runtime 指南](docs/runtime.md)。
 
 ## 快速开始
@@ -162,6 +169,37 @@ python examples/codex_runtime.py
 该命令会使用你已有的 Codex 账号进行一次真实模型调用。最终 JSON 会列出每次尝试的
 Verdict，并且只有 `artifact` 字段可能携带获准传播的内容。
 
+## 接入 OpenCode Critic
+
+安装并登录 OpenCode CLI 后，它既可以作为 Worker，也可以作为 Critic。跨 Provider
+有边界流程如下：
+
+```python
+from pathlib import Path
+
+from verification_harness import OpenCodeAgentProvider, OpenCodePermissionProfile
+
+opencode_critic = OpenCodeAgentProvider(
+    provider_id="opencode/critic",
+    cwd=Path.cwd(),
+    profile=OpenCodePermissionProfile.DENY_ALL,
+)
+
+result = runtime.run(
+    proposal=proposal,
+    provider=codex_worker,
+    critic_provider=opencode_critic,
+    input_payload=task_input,
+    obligations=mandatory_obligations,
+    challenge_obligations=optional_controller_owned_checks,
+    max_repairs=1,
+)
+```
+
+运行 `python examples/codex_opencode_challenge.py` 可以体验完整的 Codex Worker →
+OpenCode Critic → 独立 Python Verifier 流程。它会复用本机已有认证，并可能消耗两个
+服务的模型额度。OpenCode 权限只是纵深防御，本地 CLI 不是操作系统安全沙箱。
+
 ## Python 编码闭环示例
 
 ```python
@@ -206,12 +244,11 @@ assert result["artifact"] is not None
 
 ## 不同模型与不同领域
 
-Runtime 依赖结构化接口，而不是某一家模型 API。Codex 可以直接使用第一方
-`CodexAgentProvider`；其他 SDK 可以通过 `CallableAgentProvider` 接入；本地 Claude、
-Grok、OpenCode 或其他 CLI 可以使用严格的 `CommandAgentProvider` 协议。应用可以在
-这些接口上封装 GPT Planner、Grok Worker 和 Claude Critic，但当前 Beta 运行时每次
-运行只调用一个 Provider，尚未把它们调度到同一工作流。多模型可以降低相关错误，但
-不能替代独立证据，也不能授予传播权限。
+Runtime 依赖结构化接口，而不是某一家模型 API。Codex 使用第一方 SDK 适配器，
+OpenCode 使用第一方 CLI 适配器，其他 SDK 可以通过 `CallableAgentProvider` 接入，
+其他本地工具可以使用严格的 `CommandAgentProvider` 协议。当前 Beta 可以串行调度
+一个 Worker 和一个可选的不同 Critic，但还不会运行并行分支或收据门控 DAG。模型
+多样性有助于降低相关错误，但不能代替独立证据，也不会自动赋予传播权限。
 
 通用 `VerificationKernel` 不局限于 Python 源码。它使用独立的 JSON 负载，因此适配器
 可以表示计划、研究结论、数学答案、文档、代码补丁或其他领域。但每个领域都必须提供：
@@ -238,10 +275,10 @@ Beta 版 SQLite 运行和收据存储可以跨本地控制器重启持久化，�
 
 ## 当前限制
 
-0.3.0 Beta 尚未内置第一方 Claude SDK 客户端、容器执行后端、持久化哈希链审计、
-通用 Critic 调度、多 Worker 并行、收据门控 DAG 或非代码领域包。Codex SDK 调用
-目前依赖 SDK 自身的取消机制，其 Workspace Write 模式也不是容器边界。命令适配器会
-继承调用者环境，输出限制也在捕获后检查，因此不是恶意进程安全沙箱。Python 兼容
-适配器目前把旧检查较粗粒度地映射到验收标准；新领域适配器应建立更精确的追踪关系。
+0.3.0 Beta 尚未内置容器执行后端、持久化哈希链审计、仓库/补丁 Claim 类型、验证器包、
+多 Worker 并行、收据门控 DAG 或非代码领域包。Codex SDK 目前依赖 SDK 自身的取消
+机制，OpenCode/Codex 的应用级权限也不是容器边界。命令适配器可能继承调用者环境，
+输出限制也在捕获后检查，因此不是恶意进程安全沙箱。Python 兼容适配器目前把旧检查
+较粗粒度地映射到验收标准；新领域适配器应建立更精确的追踪关系。
 
 后续工作请查看[路线图](docs/roadmap.md)。项目使用 Apache-2.0 许可证。

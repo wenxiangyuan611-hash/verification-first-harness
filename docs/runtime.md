@@ -116,6 +116,76 @@ makes a real Codex model call using the caller's existing account:
 python examples/codex_runtime.py
 ```
 
+## OpenCode CLI provider
+
+Install and authenticate OpenCode according to its
+[`CLI`](https://opencode.ai/docs/cli/) documentation, then provide an explicit
+read-only or disposable working directory:
+
+```python
+from pathlib import Path
+
+from verification_harness import (
+    OpenCodeAgentProvider,
+    OpenCodePermissionProfile,
+)
+
+opencode_critic = OpenCodeAgentProvider(
+    provider_id="opencode/critic",
+    cwd=Path.cwd(),
+    profile=OpenCodePermissionProfile.DENY_ALL,
+)
+```
+
+The adapter runs `opencode run --format json` without a shell and does not pass
+`--auto`. It injects a named agent through `OPENCODE_CONFIG_CONTENT`, disables
+sharing, and applies wildcard-deny permissions both globally and on that agent. The
+optional `READ_ONLY` profile allows only read, glob, grep, and language-server
+permissions. See OpenCode's
+[`permissions`](https://opencode.ai/docs/permissions/) documentation for the
+underlying application-level control model.
+
+Each non-empty stdout line must be a strict JSON event. The adapter accepts text
+parts, fails on error events, bounds total events/output, concatenates the text
+parts, and then applies the same exact `AgentOutput` parser used at other provider
+boundaries. The OpenCode CLI remains an external untrusted process: permission
+configuration is defense in depth, not a container or VM boundary. It may inherit
+credentials and merged local configuration needed for the caller's model setup.
+
+## Bounded Worker-to-Critic scheduling
+
+`VerificationRuntime.run` can schedule a distinct Critic before independent
+verification:
+
+```python
+result = runtime.run(
+    proposal=proposal,
+    provider=codex_worker,
+    critic_provider=opencode_critic,
+    input_payload=task_input,
+    obligations=mandatory_obligations,
+    challenge_obligations=optional_controller_owned_checks,
+    max_repairs=1,
+)
+```
+
+The Critic does not create verifier commands. Its output must use
+`application/vnd.verification-first.challenge-selection+json` and may select only
+IDs from `challenge_obligations`. The deterministic challenge policy always retains
+the mandatory baseline, rejects unknown IDs and same-provider self-review, and sends
+the resulting plan to independent verifier plugins. Critic rationale remains a
+quarantined claim; repair feedback is derived from verifier observations instead.
+
+The complete two-agent live example is
+[`examples/codex_opencode_challenge.py`](../examples/codex_opencode_challenge.py):
+
+```bash
+python examples/codex_opencode_challenge.py
+```
+
+It may consume both Codex and OpenCode model usage. The repository test suite uses
+fake SDK/CLI runners and does not require either account.
+
 ## Command verifier obligation
 
 The alpha command verifier supports `command.exit_code` obligations:
@@ -140,7 +210,7 @@ belong to trusted configuration; never build `argv` by interpolating agent outpu
 ## Trust zones
 
 - `AUTHORIZED`: the exact acceptance contract approved by `SpecAuthority`.
-- `QUARANTINED`: raw provider claims, including repair attempts.
+- `QUARANTINED`: raw Worker, Critic, and repair claims.
 - `AUTHENTICATED_EVIDENCE`: signed observations from the evidence boundary.
 - `DECISION_ONLY`: signed decisions that do not themselves carry claim payload.
 - `VERIFIED`: a `VerifiedArtifact` issued after full gate validation.

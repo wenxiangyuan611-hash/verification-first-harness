@@ -82,6 +82,19 @@ selected directory is disposable or isolated from trusted state.
 The controller must create and police that quarantine boundary out of band, and must
 not treat resulting filesystem changes as verified propagation.
 
+The OpenCode adapter defaults to a named agent with wildcard-deny permissions and
+does not pass the CLI `--auto` flag. Its optional read-only profile allows only
+OpenCode read, glob, grep, and language-server permissions. It also disables session
+sharing and requires an explicit working directory. These are application-level
+controls, not OS isolation. OpenCode still runs as a local process, inherits either
+the caller environment or an explicitly supplied environment, may load merged local
+configuration, and may contain plugins outside the harness trust boundary.
+
+A Critic cannot introduce executable verifier payloads. It may select only IDs from
+a controller-owned obligation catalog, while mandatory baseline obligations remain
+immutable. The selection is policy-authorized scheduling input, not evidence; the
+critic rationale stays quarantined and cannot enter a verified artifact.
+
 ## Built-in Python runner limitations
 
 The subprocess runner is a reliability boundary, not a hostile-code sandbox. It does

@@ -17,18 +17,29 @@ uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   keys, oversized responses, SDK errors, and mutable schema attacks.
 - A runnable read-only Codex example that enters the same quarantine, independent
   verifier, signed receipt, and artifact-gate path as other providers.
+- A first-party `OpenCodeAgentProvider` over documented non-interactive CLI JSON
+  events, with an explicit working directory, deny-all default permissions, an
+  optional read-only profile, and strict local event/final-output parsing.
+- A provider-neutral `ChallengeScheduler` and `RuntimeChallengePolicy`: a distinct
+  Critic may select only controller-owned optional checks, cannot replace baseline
+  obligations, and cannot issue evidence or verdicts.
+- A runnable Codex Worker → OpenCode Critic → independent Python Verifier example.
+- Adversarial tests for self-review, unauthorized checks, baseline replacement,
+  denied critic actions, malformed OpenCode events, and failed challenge selection.
 
 ### Changed
 
-- The development package version is now `0.3.0b1`.
+- The development package version is now `0.3.0b2`.
 - The package status classifier and documentation now identify the current line as
   beta while retaining the research-prototype warning.
+- `VerificationRuntime.run` now accepts an optional Critic provider and an authorized
+  challenge-obligation catalog while preserving the single-provider API.
 
 ### Planned
 
 - Pluggable container and microVM execution backends.
 - Parallel worker and critic orchestration.
-- First-party Claude and OpenCode provider adapters.
+- Repository and patch claim adapters plus coding verifier packs.
 - Durable append-only audit storage.
 
 ## [0.3.0-alpha.1] - 2026-08-19
