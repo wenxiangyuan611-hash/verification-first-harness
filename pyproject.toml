@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "verification-first-harness"
-version = "0.3.0a1"
+version = "0.3.0b2"
 description = "A verification-first control plane that prevents unverified agent claims from propagating."
 readme = "README.md"
 requires-python = ">=3.10"
@@ -12,7 +12,7 @@ license = "Apache-2.0"
 license-files = ["LICENSE"]
 keywords = ["agents", "multi-agent", "verification", "reliability", "trust-gate"]
 classifiers = [
-  "Development Status :: 3 - Alpha",
+  "Development Status :: 4 - Beta",
   "Intended Audience :: Developers",
   "Operating System :: OS Independent",
   "Programming Language :: Python :: 3",
@@ -31,6 +31,9 @@ Issues = "https://github.com/wenxiangyuan611-hash/verification-first-harness/iss
 Changelog = "https://github.com/wenxiangyuan611-hash/verification-first-harness/blob/main/CHANGELOG.md"
 
 [project.optional-dependencies]
+codex = [
+  "openai-codex>=0.147.0,<0.148.0",
+]
 dev = [
   "build>=1.2",
   "mypy>=1.11",

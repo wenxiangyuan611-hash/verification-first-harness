@@ -5,6 +5,7 @@ import tempfile
 import unittest
 from contextlib import closing
 from pathlib import Path
+from typing import Any
 
 from verification_harness.actions import ActionGate, AllowListActionPolicy
 from verification_harness.authority import (
@@ -12,6 +13,11 @@ from verification_harness.authority import (
     HMACReceiptAuthority,
     HMACSpecAuthority,
 )
+from verification_harness.challenges import (
+    CHALLENGE_PAYLOAD_TYPE,
+    ChallengeInvocationError,
+)
+from verification_harness.codex_provider import CodexAgentProvider, CodexRunResult
 from verification_harness.decision import VerificationObligation
 from verification_harness.gate import ReplayError
 from verification_harness.kernel import VerificationKernel
@@ -49,6 +55,46 @@ class UnreadableProvider:
                 raise RuntimeError("cannot render")
 
         raise UnreadableError()
+
+
+class StaticCodexRunner:
+    def run(self, **kwargs: Any) -> CodexRunResult:
+        del kwargs
+        return CodexRunResult(
+            final_response=(
+                '{"payload_type":"application/json","payload":{"answer":42}}'
+            )
+        )
+
+
+class RepairingProvider:
+    provider_id = "repairing-worker"
+
+    def __init__(self) -> None:
+        self.requests: list[AgentRequest] = []
+
+    def invoke(self, request: AgentRequest) -> AgentOutput:
+        self.requests.append(request)
+        answer = 41 if request.attempt == 1 else 42
+        return AgentOutput(payload_type="application/json", payload={"answer": answer})
+
+
+class SelectingCritic:
+    provider_id = "opencode-critic"
+
+    def __init__(self, selected: list[str]) -> None:
+        self.selected = selected
+        self.requests: list[AgentRequest] = []
+
+    def invoke(self, request: AgentRequest) -> AgentOutput:
+        self.requests.append(request)
+        return AgentOutput(
+            payload_type=CHALLENGE_PAYLOAD_TYPE,
+            payload={
+                "selected_obligation_ids": self.selected,
+                "rationale": "The candidate may fail the exact-answer check.",
+            },
+        )
 
 
 class VerificationRuntimeTests(unittest.TestCase):
@@ -170,6 +216,160 @@ class VerificationRuntimeTests(unittest.TestCase):
             SQLiteReceiptUseStore(SQLiteRunStore(self.database)).consume(
                 result.attempts[-1].receipt
             )
+
+    def test_codex_provider_enters_the_same_quarantine_and_verification_flow(self) -> None:
+        runtime, store = self.runtime()
+        result = runtime.run(
+            proposal=self.proposal,
+            provider=CodexAgentProvider(
+                provider_id="codex-test-worker",
+                runner=StaticCodexRunner(),
+            ),
+            input_payload={"instruction": "answer independently"},
+            obligations=self.obligations,
+        )
+
+        self.assertEqual(Verdict.VERIFIED.value, result.verdict)
+        self.assertIsNotNone(result.artifact)
+        if result.artifact is None:
+            self.fail("verified Codex result did not contain an artifact")
+        self.assertEqual({"answer": 42}, result.artifact.payload)
+        claim_record = next(
+            record
+            for record in store.records(result.context.run_id)
+            if record.kind is RunRecordKind.CLAIM
+        )
+        self.assertIs(TrustLabel.QUARANTINED, claim_record.trust_label)
+        self.assertEqual("codex-test-worker", claim_record.payload["producer_id"])
+
+    def test_critic_selects_authorized_check_before_repair_and_reverification(self) -> None:
+        always_pass_code = "import sys; sys.exit(0)"
+        baseline = (
+            VerificationObligation(
+                id="baseline-contract",
+                kind="command.exit_code",
+                description="Run the mandatory baseline contract check.",
+                criterion_ids=("correct",),
+                payload={
+                    "argv": [sys.executable, "-c", always_pass_code],
+                    "expected_exit_code": 0,
+                },
+            ),
+        )
+        worker = RepairingProvider()
+        critic = SelectingCritic(["answer-check"])
+        runtime, store = self.runtime(
+            frozenset({"agent.invoke", "agent.challenge", "verifier.invoke"})
+        )
+
+        result = runtime.run(
+            proposal=self.proposal,
+            provider=worker,
+            critic_provider=critic,
+            input_payload={"instruction": "answer the question"},
+            obligations=baseline,
+            challenge_obligations=self.obligations,
+            max_repairs=1,
+        )
+
+        self.assertEqual(Verdict.VERIFIED.value, result.verdict)
+        self.assertEqual(2, len(result.attempts))
+        self.assertEqual(2, len(worker.requests))
+        self.assertEqual(2, len(critic.requests))
+        self.assertEqual(
+            [Verdict.REJECTED.value, Verdict.VERIFIED.value],
+            [attempt.verdict for attempt in result.attempts],
+        )
+        self.assertEqual(
+            ("answer-check",), result.attempts[0].challenge.selected_obligation_ids
+        )
+        self.assertIn("observations", worker.requests[1].feedback)
+        self.assertEqual(
+            41,
+            critic.requests[0].input_payload["candidate_claim"]["payload"]["answer"],
+        )
+        claim_records = [
+            record
+            for record in store.records(result.context.run_id)
+            if record.kind is RunRecordKind.CLAIM
+        ]
+        self.assertEqual(4, len(claim_records))
+        self.assertEqual(
+            ["WORKER", "CRITIC", "WORKER", "CRITIC"],
+            [record.payload["role"] for record in claim_records],
+        )
+        self.assertTrue(
+            all(record.trust_label is TrustLabel.QUARANTINED for record in claim_records)
+        )
+
+    def test_critic_cannot_select_an_unauthorized_check(self) -> None:
+        worker = CountingProvider()
+        critic = SelectingCritic(["agent-supplied-shell-command"])
+        runtime, store = self.runtime(
+            frozenset({"agent.invoke", "agent.challenge", "verifier.invoke"})
+        )
+        with self.assertRaisesRegex(ChallengeInvocationError, "unauthorized"):
+            runtime.run(
+                proposal=self.proposal,
+                provider=worker,
+                critic_provider=critic,
+                input_payload={},
+                obligations=self.obligations,
+                challenge_obligations=(
+                    VerificationObligation(
+                        id="edge-check",
+                        kind="command.exit_code",
+                        description="Run a pre-authorized edge check.",
+                        criterion_ids=("correct",),
+                        payload={
+                            "argv": [sys.executable, "-c", "import sys; sys.exit(0)"],
+                            "expected_exit_code": 0,
+                        },
+                    ),
+                ),
+            )
+        self.assertEqual(1, worker.calls)
+        self.assertEqual(1, len(critic.requests))
+        with closing(sqlite3.connect(store.path)) as connection:
+            claim_count = connection.execute(
+                "SELECT COUNT(*) FROM run_records WHERE kind = ?",
+                (RunRecordKind.CLAIM.value,),
+            ).fetchone()[0]
+        self.assertEqual(2, claim_count)
+
+    def test_challenged_workflow_rejects_same_provider_before_invocation(self) -> None:
+        provider = CountingProvider()
+        runtime, _ = self.runtime(
+            frozenset({"agent.invoke", "agent.challenge", "verifier.invoke"})
+        )
+        with self.assertRaisesRegex(ValueError, "distinct"):
+            runtime.run(
+                proposal=self.proposal,
+                provider=provider,
+                critic_provider=provider,
+                input_payload={},
+                obligations=self.obligations,
+                challenge_obligations=self.obligations,
+            )
+        self.assertEqual(0, provider.calls)
+
+    def test_invalid_challenge_catalog_fails_preflight_before_agent_calls(self) -> None:
+        worker = CountingProvider()
+        critic = SelectingCritic([])
+        runtime, _ = self.runtime(
+            frozenset({"agent.invoke", "agent.challenge", "verifier.invoke"})
+        )
+        with self.assertRaisesRegex(ValueError, "replace baseline"):
+            runtime.run(
+                proposal=self.proposal,
+                provider=worker,
+                critic_provider=critic,
+                input_payload={},
+                obligations=self.obligations,
+                challenge_obligations=self.obligations,
+            )
+        self.assertEqual(0, worker.calls)
+        self.assertEqual([], critic.requests)
 
     def test_denied_agent_action_never_invokes_provider_or_creates_claim(self) -> None:
         provider = CountingProvider()
