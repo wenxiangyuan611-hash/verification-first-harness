@@ -32,7 +32,7 @@ Changelog = "https://github.com/wenxiangyuan611-hash/verification-first-harness/
 
 [project.optional-dependencies]
 codex = [
-  "openai-codex>=0.147.0,<0.148.0",
+  "openai-codex>=0.147.0,<0.159.0",
 ]
 dev = [
   "build>=1.2",
